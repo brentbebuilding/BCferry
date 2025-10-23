@@ -12,8 +12,10 @@ const routeFilter = document.getElementById('routeFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 
 // BC Ferries API endpoints - calling directly from browser (v2)
-const BC_FERRIES_API_CAPACITY = 'https://www.bcferriesapi.ca/v2/capacity/';
-const BC_FERRIES_API_NONCAPACITY = 'https://www.bcferriesapi.ca/v2/noncapacity/';
+// Using correct endpoints WITHOUT www subdomain
+const BC_FERRIES_API_ROOT = 'https://bcferriesapi.ca/v2/';
+const BC_FERRIES_API_CAPACITY = 'https://bcferriesapi.ca/v2/capacity/';
+const BC_FERRIES_API_NONCAPACITY = 'https://bcferriesapi.ca/v2/noncapacity/';
 
 // TEMPORARY: Use noncapacity only to debug
 const USE_NONCAPACITY_ONLY = false; // CHANGED BACK TO FALSE - use capacity!
