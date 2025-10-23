@@ -301,13 +301,34 @@ async function fetchFerryData() {
             nonCapacityResponse.json()
         ]);
 
+        console.log('=== CAPACITY DATA ===');
         console.log('Capacity routes:', capacityData.routes?.length || 0);
+        if (capacityData.routes && capacityData.routes.length > 0) {
+            console.log('Sample capacity route:', capacityData.routes[0]);
+            if (capacityData.routes[0].sailings) {
+                console.log('Sample capacity sailings:', capacityData.routes[0].sailings.slice(0, 3));
+            }
+        }
+
+        console.log('\n=== NON-CAPACITY DATA ===');
         console.log('Non-capacity routes:', nonCapacityData.routes?.length || 0);
+        if (nonCapacityData.routes && nonCapacityData.routes.length > 0) {
+            console.log('Sample noncapacity route:', nonCapacityData.routes[0]);
+            if (nonCapacityData.routes[0].sailings) {
+                console.log('Sample noncapacity sailings:', nonCapacityData.routes[0].sailings.slice(0, 5));
+                console.log('ALL noncapacity sailings for first route:', nonCapacityData.routes[0].sailings);
+            }
+        }
 
         // Merge data from both APIs
         allRoutes = mergeRoutes(capacityData.routes, nonCapacityData.routes);
 
+        console.log('\n=== MERGED DATA ===');
         console.log('Merged routes:', allRoutes.length);
+        if (allRoutes.length > 0) {
+            console.log('First merged route:', allRoutes[0]);
+            console.log('First merged route sailings:', allRoutes[0].sailings);
+        }
 
         updateRouteFilter();
         filterAndDisplayRoutes();
