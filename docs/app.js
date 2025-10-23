@@ -335,14 +335,28 @@ function updateRouteFilter() {
     // Clear existing options except "All Routes"
     routeFilter.innerHTML = '<option value="all">All Routes</option>';
 
-    // Add route options
+    // Major routes only - filter out smaller Gulf Islands routes
+    const majorRoutes = [
+        'TSA-SWB', 'SWB-TSA', // Tsawwassen ↔ Swartz Bay (Victoria/Vancouver)
+        'TSA-DUK', 'DUK-TSA', // Tsawwassen ↔ Duke Point (Nanaimo)
+        'HSB-NAN', 'NAN-HSB', // Horseshoe Bay ↔ Nanaimo (Departure Bay)
+        'HSB-LNG', 'LNG-HSB', // Horseshoe Bay ↔ Langdale (Sunshine Coast)
+        'HSB-BOW', 'BOW-HSB'  // Horseshoe Bay ↔ Bowen Island
+    ];
+
+    // Add route options - only major routes
     allRoutes.forEach(route => {
-        const fromName = getTerminalName(route.fromTerminalCode);
-        const toName = getTerminalName(route.toTerminalCode);
-        const option = document.createElement('option');
-        option.value = `${route.fromTerminalCode}-${route.toTerminalCode}`;
-        option.textContent = `${fromName} → ${toName}`;
-        routeFilter.appendChild(option);
+        const routeCode = `${route.fromTerminalCode}-${route.toTerminalCode}`;
+
+        // Only add if it's a major route
+        if (majorRoutes.includes(routeCode)) {
+            const fromName = getTerminalName(route.fromTerminalCode);
+            const toName = getTerminalName(route.toTerminalCode);
+            const option = document.createElement('option');
+            option.value = routeCode;
+            option.textContent = `${fromName} → ${toName}`;
+            routeFilter.appendChild(option);
+        }
     });
 
     // Restore previous selection if it still exists
