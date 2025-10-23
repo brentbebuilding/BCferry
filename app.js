@@ -96,14 +96,23 @@ function filterSailingsByStatus(sailings, dayFilter) {
         return sailings.filter(s => s.time); // Only show sailings with a time
     }
 
-    // Note: The API doesn't provide actual dates, only status
-    // "future" sailings are upcoming (could be today or tomorrow)
-    // We can't reliably distinguish between today's future and tomorrow's sailings
     if (dayFilter === 'today') {
-        return sailings.filter(s => s.sailingStatus === 'current' || s.sailingStatus === 'future' && s.time);
+        // Today's sailings: current, past, or future WITHOUT a date in vesselName
+        return sailings.filter(s => {
+            if (!s.time) return false;
+            // Exclude sailings that have a date prefix like "(Oct 24, 2025)"
+            const hasFutureDate = s.vesselName && s.vesselName.trim().startsWith('(');
+            return !hasFutureDate;
+        });
     } else if (dayFilter === 'tomorrow') {
-        // Tomorrow's sailings might have date in vesselName like "(Oct 24, 2025)"
-        return sailings.filter(s => s.vesselName && s.vesselName.includes('202') && s.time);
+        // Tomorrow's sailings have the date at the start: "(Oct 24, 2025) Vessel Name"
+        return sailings.filter(s => {
+            if (!s.time) return false;
+            // Check if vesselName starts with a date in parentheses
+            const hasFutureDate = s.vesselName && s.vesselName.trim().startsWith('(');
+            console.log(`Checking sailing ${s.time}: vesselName="${s.vesselName}", hasFutureDate=${hasFutureDate}`);
+            return hasFutureDate;
+        });
     }
 
     return sailings.filter(s => s.time);
