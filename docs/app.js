@@ -262,96 +262,31 @@ function mergeRoutes(capacityRoutes, nonCapacityRoutes) {
     return Array.from(routeMap.values());
 }
 
-// Fetch ferry data - from BOTH capacity and noncapacity APIs
+// Fetch ferry data - CAPACITY ONLY (no merge)
 async function fetchFerryData() {
     try {
         showLoading();
         hideError();
 
-        if (USE_NONCAPACITY_ONLY) {
-            // TEMPORARY: Use only noncapacity to debug tomorrow's sailings
-            console.log('Fetching from NONCAPACITY only...');
-            const response = await fetch(BC_FERRIES_API_NONCAPACITY);
+        // Just use capacity endpoint - no merge!
+        console.log('Fetching from CAPACITY endpoint ONLY...');
+        const response = await fetch(BC_FERRIES_API_CAPACITY);
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('===== NONCAPACITY RAW DATA =====');
-            console.log('Data type:', typeof data);
-            console.log('Data keys:', Object.keys(data));
-            console.log('Routes count:', data.routes?.length);
-
-            if (data.routes && data.routes.length > 0) {
-                console.log('\n=== FIRST ROUTE ===');
-                console.log('Route object:', data.routes[0]);
-                console.log('Route keys:', Object.keys(data.routes[0]));
-
-                if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
-                    console.log('\n=== FIRST SAILING ===');
-                    console.log('Sailing object:', data.routes[0].sailings[0]);
-                    console.log('Sailing keys:', Object.keys(data.routes[0].sailings[0]));
-
-                    console.log('\n=== ALL SAILINGS (first 10) ===');
-                    data.routes[0].sailings.slice(0, 10).forEach((s, i) => {
-                        console.log(`${i}: time="${s.time}", status="${s.sailingStatus}", vessel="${s.vesselName}"`);
-                    });
-                }
-            }
-
-            allRoutes = data.routes || [];
-            console.log('\n=== SETTING allRoutes to:', allRoutes.length, 'routes');
-            updateRouteFilter();
-            filterAndDisplayRoutes();
-            updateLastUpdated();
-            return;
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Fetch from both endpoints in parallel
-        const [capacityResponse, nonCapacityResponse] = await Promise.all([
-            fetch(BC_FERRIES_API_CAPACITY),
-            fetch(BC_FERRIES_API_NONCAPACITY)
-        ]);
+        const data = await response.json();
+        console.log('Capacity data routes:', data.routes?.length);
 
-        if (!capacityResponse.ok || !nonCapacityResponse.ok) {
-            throw new Error(`HTTP error! capacity: ${capacityResponse.status}, noncapacity: ${nonCapacityResponse.status}`);
-        }
-
-        const [capacityData, nonCapacityData] = await Promise.all([
-            capacityResponse.json(),
-            nonCapacityResponse.json()
-        ]);
-
-        console.log('=== CAPACITY DATA ===');
-        console.log('Capacity routes:', capacityData.routes?.length || 0);
-        if (capacityData.routes && capacityData.routes.length > 0) {
-            console.log('Sample capacity route:', capacityData.routes[0]);
-            if (capacityData.routes[0].sailings) {
-                console.log('Sample capacity sailings:', capacityData.routes[0].sailings.slice(0, 3));
+        if (data.routes && data.routes.length > 0) {
+            console.log('First route:', data.routes[0]);
+            if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
+                console.log('First sailing:', data.routes[0].sailings[0]);
             }
         }
 
-        console.log('\n=== NON-CAPACITY DATA ===');
-        console.log('Non-capacity routes:', nonCapacityData.routes?.length || 0);
-        if (nonCapacityData.routes && nonCapacityData.routes.length > 0) {
-            console.log('Sample noncapacity route:', nonCapacityData.routes[0]);
-            if (nonCapacityData.routes[0].sailings) {
-                console.log('Sample noncapacity sailings:', nonCapacityData.routes[0].sailings.slice(0, 5));
-                console.log('ALL noncapacity sailings for first route:', nonCapacityData.routes[0].sailings);
-            }
-        }
-
-        // Merge data from both APIs
-        allRoutes = mergeRoutes(capacityData.routes, nonCapacityData.routes);
-
-        console.log('\n=== MERGED DATA ===');
-        console.log('Merged routes:', allRoutes.length);
-        if (allRoutes.length > 0) {
-            console.log('First merged route:', allRoutes[0]);
-            console.log('First merged route sailings:', allRoutes[0].sailings);
-        }
-
+        allRoutes = data.routes || [];
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
