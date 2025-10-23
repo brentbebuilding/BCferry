@@ -90,6 +90,55 @@ function getSailingDay(timeString) {
     }
 }
 
+// Check if a future sailing is tomorrow based on time comparison
+function isTomorrowSailing(sailing, allSailings) {
+    // If vesselName starts with a date like "(Oct 24, 2025)", it's definitely tomorrow
+    if (sailing.vesselName && sailing.vesselName.trim().startsWith('(')) {
+        return true;
+    }
+
+    // If it's not a future sailing, it can't be tomorrow
+    if (sailing.sailingStatus !== 'future') {
+        return false;
+    }
+
+    // Find the last current or most recent past sailing
+    const lastSailing = [...allSailings]
+        .reverse()
+        .find(s => s.sailingStatus === 'current' || s.sailingStatus === 'past');
+
+    if (!lastSailing || !lastSailing.time) {
+        // If no current/past sailing, assume all future sailings are today
+        return false;
+    }
+
+    // Convert times to comparable format (24-hour)
+    const parseTime = (timeStr) => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
+        if (!match) return null;
+        let hours = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const isPM = match[3].toLowerCase() === 'pm';
+
+        if (isPM && hours !== 12) hours += 12;
+        if (!isPM && hours === 12) hours = 0;
+
+        return hours * 60 + minutes; // Minutes since midnight
+    };
+
+    const currentTimeMinutes = parseTime(lastSailing.time);
+    const sailingTimeMinutes = parseTime(sailing.time);
+
+    if (currentTimeMinutes === null || sailingTimeMinutes === null) {
+        return false;
+    }
+
+    // If the future sailing time is less than current time, it must be tomorrow
+    // Example: current is 7:26 PM (1166 mins), sailing is 6:15 AM (375 mins)
+    return sailingTimeMinutes < currentTimeMinutes;
+}
+
 // Filter sailings by status (for day filter)
 function filterSailingsByStatus(sailings, dayFilter) {
     if (dayFilter === 'all') {
@@ -97,21 +146,17 @@ function filterSailingsByStatus(sailings, dayFilter) {
     }
 
     if (dayFilter === 'today') {
-        // Today's sailings: current, past, or future WITHOUT a date in vesselName
+        // Today's sailings: past, current, or future that are NOT tomorrow
         return sailings.filter(s => {
             if (!s.time) return false;
-            // Exclude sailings that have a date prefix like "(Oct 24, 2025)"
-            const hasFutureDate = s.vesselName && s.vesselName.trim().startsWith('(');
-            return !hasFutureDate;
+            if (s.sailingStatus === 'past' || s.sailingStatus === 'current') return true;
+            return !isTomorrowSailing(s, sailings);
         });
     } else if (dayFilter === 'tomorrow') {
-        // Tomorrow's sailings have the date at the start: "(Oct 24, 2025) Vessel Name"
+        // Tomorrow's sailings
         return sailings.filter(s => {
             if (!s.time) return false;
-            // Check if vesselName starts with a date in parentheses
-            const hasFutureDate = s.vesselName && s.vesselName.trim().startsWith('(');
-            console.log(`Checking sailing ${s.time}: vesselName="${s.vesselName}", hasFutureDate=${hasFutureDate}`);
-            return hasFutureDate;
+            return isTomorrowSailing(s, sailings);
         });
     }
 
