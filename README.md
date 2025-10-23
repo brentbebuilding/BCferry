@@ -2,6 +2,17 @@
 
 A simple web application that displays real-time BC Ferry schedules and vessel capacity information.
 
+## Live Demo
+
+View the live application on GitHub Pages: **[BC Ferry Tracker](https://brentbebuilding.github.io/BCferry/)**
+
+## Deployment Options
+
+This project offers two deployment options:
+
+1. **GitHub Pages (Static)** - The `docs/` folder contains a static version that runs entirely in the browser. Perfect for quick deployment without a server.
+2. **Node.js Server** - The root folder contains a full Express server version with API proxy capabilities.
+
 ## Features
 
 - Real-time ferry schedule data from BC Ferries
@@ -13,11 +24,25 @@ A simple web application that displays real-time BC Ferry schedules and vessel c
 
 ## Technology Stack
 
-- **Backend**: Node.js + Express
+- **Backend**: Node.js + Express (optional)
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Data Source**: [BC Ferries API](https://www.bcferriesapi.ca)
 
-## Installation
+## Quick Start - GitHub Pages (Recommended)
+
+The easiest way to use this application is through GitHub Pages:
+
+1. Fork this repository
+2. Go to your repository Settings > Pages
+3. Under "Source", select "Deploy from a branch"
+4. Select branch: `main` (or your default branch)
+5. Select folder: `/docs`
+6. Click Save
+7. Your site will be published at `https://[your-username].github.io/BCferry/`
+
+The static version in the `docs/` folder runs entirely in the browser and requires no server setup.
+
+## Installation - Node.js Server Version
 
 1. Clone the repository:
 ```bash
@@ -104,14 +129,20 @@ This application uses the unofficial [BC Ferries API](https://www.bcferriesapi.c
 
 ```
 BCferry/
-├── public/
-│   ├── index.html      # Main HTML file
-│   ├── styles.css      # Stylesheet
-│   └── app.js          # Frontend JavaScript
-├── server.js           # Express server
-├── package.json        # Dependencies and scripts
-├── .gitignore         # Git ignore rules
-└── README.md          # This file
+├── docs/                   # Static version for GitHub Pages
+│   ├── index.html          # Main HTML file
+│   ├── styles.css          # Stylesheet
+│   ├── app.js              # Frontend JavaScript (calls API directly)
+│   ├── _config.yml         # GitHub Pages config
+│   └── .nojekyll          # Disable Jekyll processing
+├── public/                 # Frontend for Node.js server version
+│   ├── index.html          # Main HTML file
+│   ├── styles.css          # Stylesheet
+│   └── app.js              # Frontend JavaScript (calls local API)
+├── server.js               # Express server (Node.js version)
+├── package.json            # Dependencies and scripts
+├── .gitignore             # Git ignore rules
+└── README.md              # This file
 ```
 
 ## License
