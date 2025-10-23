@@ -503,8 +503,12 @@ function updateLastUpdated() {
 const themeToggle = document.getElementById('themeToggle');
 const themeIcon = document.querySelector('.theme-icon');
 
+console.log('Theme toggle button:', themeToggle);
+console.log('Theme icon:', themeIcon);
+
 // Load saved theme preference
 const savedTheme = localStorage.getItem('theme') || 'light';
+console.log('Saved theme:', savedTheme);
 document.body.setAttribute('data-theme', savedTheme);
 if (savedTheme === 'dark') {
     themeIcon.textContent = '☀️';
@@ -514,8 +518,10 @@ if (savedTheme === 'dark') {
 
 // Toggle theme function
 function toggleTheme() {
+    console.log('Toggle theme clicked!');
     const currentTheme = document.body.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    console.log(`Switching from ${currentTheme} to ${newTheme}`);
 
     document.body.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
@@ -529,7 +535,12 @@ function toggleTheme() {
 }
 
 // Event listeners
-themeToggle.addEventListener('click', toggleTheme);
+if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+    console.log('Theme toggle listener added');
+} else {
+    console.error('Theme toggle button not found!');
+}
 refreshBtn.addEventListener('click', fetchFerryData);
 dayFilter.addEventListener('change', filterAndDisplayRoutes);
 routeFilter.addEventListener('change', filterAndDisplayRoutes);
