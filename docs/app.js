@@ -49,6 +49,25 @@ function formatTime(timeString) {
     });
 }
 
+// Format date
+function formatDate(timeString) {
+    if (!timeString) return '';
+    const date = new Date(timeString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Compare just the date part
+    const dateStr = date.toDateString();
+    const todayStr = today.toDateString();
+    const tomorrowStr = tomorrow.toDateString();
+
+    if (dateStr === todayStr) return 'Today';
+    if (dateStr === tomorrowStr) return 'Tomorrow';
+
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 // Check if a sailing is today, tomorrow, or another day
 function getSailingDay(timeString) {
     if (!timeString) return null;
@@ -229,6 +248,7 @@ function createRouteCard(route) {
 // Create sailing card HTML
 function createSailingCard(sailing) {
     const time = formatTime(sailing.time);
+    const date = formatDate(sailing.time);
     const capacityPercent = sailing.fill || '0';
     const capacityLevel = getCapacityLevel(capacityPercent);
     const capacityText = getCapacityText(capacityPercent);
@@ -245,7 +265,7 @@ function createSailingCard(sailing) {
 
     return `
         <div class="sailing-card">
-            <div class="sailing-time">${time}</div>
+            <div class="sailing-time">${time} ${date ? `<span style="font-size: 0.9rem; color: #666; font-weight: normal;">- ${date}</span>` : ''}</div>
             <div class="sailing-info">
                 <div class="info-row">
                     <span class="info-label">Status:</span>
