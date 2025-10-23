@@ -299,15 +299,30 @@ async function fetchFerryData() {
             }
 
             const data = await response.json();
-            console.log('Noncapacity data:', data);
+            console.log('===== NONCAPACITY RAW DATA =====');
+            console.log('Data type:', typeof data);
+            console.log('Data keys:', Object.keys(data));
             console.log('Routes count:', data.routes?.length);
 
             if (data.routes && data.routes.length > 0) {
-                console.log('First route:', data.routes[0]);
-                console.log('First route sailings:', data.routes[0].sailings);
+                console.log('\n=== FIRST ROUTE ===');
+                console.log('Route object:', data.routes[0]);
+                console.log('Route keys:', Object.keys(data.routes[0]));
+
+                if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
+                    console.log('\n=== FIRST SAILING ===');
+                    console.log('Sailing object:', data.routes[0].sailings[0]);
+                    console.log('Sailing keys:', Object.keys(data.routes[0].sailings[0]));
+
+                    console.log('\n=== ALL SAILINGS (first 10) ===');
+                    data.routes[0].sailings.slice(0, 10).forEach((s, i) => {
+                        console.log(`${i}: time="${s.time}", status="${s.sailingStatus}", vessel="${s.vesselName}"`);
+                    });
+                }
             }
 
             allRoutes = data.routes || [];
+            console.log('\n=== SETTING allRoutes to:', allRoutes.length, 'routes');
             updateRouteFilter();
             filterAndDisplayRoutes();
             updateLastUpdated();
