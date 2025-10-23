@@ -332,31 +332,53 @@ async function fetchFerryData() {
 function updateRouteFilter() {
     const currentValue = routeFilter.value;
 
-    // Clear existing options except "All Routes"
-    routeFilter.innerHTML = '<option value="all">All Routes</option>';
+    // Clear existing options
+    routeFilter.innerHTML = '<option value="all">🌐 All Routes</option>';
 
-    // Major routes only - filter out smaller Gulf Islands routes
-    const majorRoutes = [
-        'TSA-SWB', 'SWB-TSA', // Tsawwassen ↔ Swartz Bay (Victoria/Vancouver)
-        'TSA-DUK', 'DUK-TSA', // Tsawwassen ↔ Duke Point (Nanaimo)
-        'HSB-NAN', 'NAN-HSB', // Horseshoe Bay ↔ Nanaimo (Departure Bay)
-        'HSB-LNG', 'LNG-HSB', // Horseshoe Bay ↔ Langdale (Sunshine Coast)
-        'HSB-BOW', 'BOW-HSB'  // Horseshoe Bay ↔ Bowen Island
+    // Organized by terminal groups for better UX
+    const routeGroups = [
+        {
+            label: '─── Vancouver Area ───',
+            routes: [
+                { code: 'TSA-SWB', emoji: '🏙️', label: 'Tsawwassen → Swartz Bay (Victoria)' },
+                { code: 'TSA-DUK', emoji: '🏙️', label: 'Tsawwassen → Duke Point (Nanaimo)' },
+                { code: 'SWB-TSA', emoji: '🏛️', label: 'Swartz Bay (Victoria) → Tsawwassen' },
+                { code: 'DUK-TSA', emoji: '⚓', label: 'Duke Point (Nanaimo) → Tsawwassen' }
+            ]
+        },
+        {
+            label: '─── North Vancouver ───',
+            routes: [
+                { code: 'HSB-NAN', emoji: '🌊', label: 'Horseshoe Bay → Nanaimo' },
+                { code: 'HSB-LNG', emoji: '🌊', label: 'Horseshoe Bay → Langdale (Sunshine Coast)' },
+                { code: 'HSB-BOW', emoji: '🌊', label: 'Horseshoe Bay → Bowen Island' },
+                { code: 'NAN-HSB', emoji: '⚓', label: 'Nanaimo → Horseshoe Bay' },
+                { code: 'LNG-HSB', emoji: '⛰️', label: 'Langdale (Sunshine Coast) → Horseshoe Bay' },
+                { code: 'BOW-HSB', emoji: '🏝️', label: 'Bowen Island → Horseshoe Bay' }
+            ]
+        }
     ];
 
-    // Add route options - only major routes
-    allRoutes.forEach(route => {
-        const routeCode = `${route.fromTerminalCode}-${route.toTerminalCode}`;
+    // Build options with groups
+    routeGroups.forEach(group => {
+        // Add group separator (disabled option)
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = group.label;
+        separator.style.fontWeight = 'bold';
+        separator.style.color = '#10b981';
+        routeFilter.appendChild(separator);
 
-        // Only add if it's a major route
-        if (majorRoutes.includes(routeCode)) {
-            const fromName = getTerminalName(route.fromTerminalCode);
-            const toName = getTerminalName(route.toTerminalCode);
-            const option = document.createElement('option');
-            option.value = routeCode;
-            option.textContent = `${fromName} → ${toName}`;
-            routeFilter.appendChild(option);
-        }
+        // Add routes in this group
+        group.routes.forEach(routeInfo => {
+            const route = allRoutes.find(r => `${r.fromTerminalCode}-${r.toTerminalCode}` === routeInfo.code);
+            if (route) {
+                const option = document.createElement('option');
+                option.value = routeInfo.code;
+                option.textContent = `  ${routeInfo.emoji} ${routeInfo.label}`;
+                routeFilter.appendChild(option);
+            }
+        });
     });
 
     // Restore previous selection if it still exists
