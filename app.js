@@ -53,24 +53,34 @@ function formatTime(timeString) {
     });
 }
 
-// Get status label for sailing
+// Get status label for sailing - SHOW ALL DATA
 function getStatusLabel(sailing) {
-    if (!sailing.sailingStatus) return '';
+    const parts = [];
 
-    // Check if vessel name contains a date (tomorrow's sailings)
+    // Show sailing status
+    if (sailing.sailingStatus) {
+        parts.push(`Status: ${sailing.sailingStatus}`);
+    }
+
+    // Show if vessel name has a date
     if (sailing.vesselName && sailing.vesselName.includes('202')) {
         const match = sailing.vesselName.match(/\(([^)]+)\)/);
         if (match) {
-            return match[1]; // Returns the date like "Oct 24, 2025"
+            parts.push(`DATE: ${match[1]}`);
         }
     }
 
-    // Otherwise use sailing status
-    if (sailing.sailingStatus === 'current') return 'Departing Now';
-    if (sailing.sailingStatus === 'past') return 'Departed';
-    if (sailing.sailingStatus === 'future') return 'Upcoming';
+    // Show any date field
+    if (sailing.date) {
+        parts.push(`date field: ${sailing.date}`);
+    }
 
-    return '';
+    // Show departure date if exists
+    if (sailing.departureDate) {
+        parts.push(`departureDate: ${sailing.departureDate}`);
+    }
+
+    return parts.join(' | ');
 }
 
 // Check if a sailing is today, tomorrow, or another day
@@ -154,42 +164,9 @@ function isTomorrowSailing(sailing, allSailings) {
     return isTomorrow;
 }
 
-// Filter sailings by status (for day filter)
+// Filter sailings by status (for day filter) - TEMPORARILY DISABLED
 function filterSailingsByStatus(sailings, dayFilter) {
-    console.log(`\n=== Filtering sailings, dayFilter: ${dayFilter} ===`);
-    console.log(`Total sailings to filter: ${sailings.length}`);
-
-    if (dayFilter === 'all') {
-        const result = sailings.filter(s => s.time);
-        console.log(`All sailings with time: ${result.length}`);
-        return result;
-    }
-
-    if (dayFilter === 'today') {
-        // Today's sailings: past, current, or future that are NOT tomorrow
-        const result = sailings.filter(s => {
-            if (!s.time) return false;
-            if (s.sailingStatus === 'past' || s.sailingStatus === 'current') return true;
-            return !isTomorrowSailing(s, sailings);
-        });
-        console.log(`Today's sailings: ${result.length}`);
-        return result;
-    } else if (dayFilter === 'tomorrow') {
-        // Tomorrow's sailings
-        console.log('Checking each sailing for tomorrow:');
-        const result = sailings.filter(s => {
-            if (!s.time) {
-                console.log(`  ❌ No time`);
-                return false;
-            }
-            const isTomorrow = isTomorrowSailing(s, sailings);
-            console.log(`  ${s.time} (${s.sailingStatus}) - vessel: "${s.vesselName}" - isTomorrow: ${isTomorrow}`);
-            return isTomorrow;
-        });
-        console.log(`Tomorrow's sailings found: ${result.length}`);
-        return result;
-    }
-
+    // DISABLED - Just show all sailings so we can see the data
     return sailings.filter(s => s.time);
 }
 
