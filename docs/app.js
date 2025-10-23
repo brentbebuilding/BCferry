@@ -482,7 +482,37 @@ function updateLastUpdated() {
     lastUpdated.textContent = `Last updated: ${now.toLocaleTimeString()}`;
 }
 
+// Theme toggle functionality
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.querySelector('.theme-icon');
+
+// Load saved theme preference
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.body.setAttribute('data-theme', savedTheme);
+if (savedTheme === 'dark') {
+    themeIcon.textContent = '☀️';
+} else {
+    themeIcon.textContent = '🌙';
+}
+
+// Toggle theme function
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+    document.body.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+
+    // Update icon
+    if (newTheme === 'dark') {
+        themeIcon.textContent = '☀️';
+    } else {
+        themeIcon.textContent = '🌙';
+    }
+}
+
 // Event listeners
+themeToggle.addEventListener('click', toggleTheme);
 refreshBtn.addEventListener('click', fetchFerryData);
 dayFilter.addEventListener('change', filterAndDisplayRoutes);
 routeFilter.addEventListener('change', filterAndDisplayRoutes);
