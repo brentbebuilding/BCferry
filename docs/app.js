@@ -11,8 +11,9 @@ const dayFilter = document.getElementById('dayFilter');
 const routeFilter = document.getElementById('routeFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 
-// BC Ferries API endpoint - calling directly from browser (v2)
-const BC_FERRIES_API = 'https://www.bcferriesapi.ca/v2/capacity/';
+// BC Ferries API endpoints - calling directly from browser (v2)
+const BC_FERRIES_API_CAPACITY = 'https://www.bcferriesapi.ca/v2/capacity/';
+const BC_FERRIES_API_NONCAPACITY = 'https://www.bcferriesapi.ca/v2/noncapacity/';
 
 // Terminal name mapping
 const terminalNames = {
@@ -181,21 +182,109 @@ function getCapacityText(percent) {
     return 'Very Limited';
 }
 
-// Fetch ferry data - directly from BC Ferries API
+// Merge sailings from capacity and noncapacity data
+function mergeSailings(capacitySailings, nonCapacitySailings) {
+    const merged = [];
+    const sailingMap = new Map();
+
+    // First, add all capacity sailings (they have fill data)
+    if (capacitySailings) {
+        capacitySailings.forEach(sailing => {
+            const key = `${sailing.time}-${sailing.sailingStatus}`;
+            sailingMap.set(key, sailing);
+        });
+    }
+
+    // Then, add noncapacity sailings that aren't already in the map
+    if (nonCapacitySailings) {
+        nonCapacitySailings.forEach(sailing => {
+            const key = `${sailing.time}-${sailing.sailingStatus}`;
+            if (!sailingMap.has(key)) {
+                // This sailing isn't in capacity data, add it without fill info
+                sailingMap.set(key, { ...sailing, fill: 0 });
+            }
+        });
+    }
+
+    // Convert map back to array and sort by time
+    return Array.from(sailingMap.values()).sort((a, b) => {
+        const parseTime = (timeStr) => {
+            if (!timeStr) return 0;
+            const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
+            if (!match) return 0;
+            let hours = parseInt(match[1]);
+            const minutes = parseInt(match[2]);
+            const isPM = match[3].toLowerCase() === 'pm';
+            if (isPM && hours !== 12) hours += 12;
+            if (!isPM && hours === 12) hours = 0;
+            return hours * 60 + minutes;
+        };
+        return parseTime(a.time) - parseTime(b.time);
+    });
+}
+
+// Merge routes from both APIs
+function mergeRoutes(capacityRoutes, nonCapacityRoutes) {
+    const routeMap = new Map();
+
+    // Add capacity routes
+    if (capacityRoutes) {
+        capacityRoutes.forEach(route => {
+            const key = `${route.fromTerminalCode}-${route.toTerminalCode}`;
+            routeMap.set(key, route);
+        });
+    }
+
+    // Merge or add noncapacity routes
+    if (nonCapacityRoutes) {
+        nonCapacityRoutes.forEach(route => {
+            const key = `${route.fromTerminalCode}-${route.toTerminalCode}`;
+            if (routeMap.has(key)) {
+                // Merge sailings
+                const existingRoute = routeMap.get(key);
+                existingRoute.sailings = mergeSailings(existingRoute.sailings, route.sailings);
+            } else {
+                // New route, add it (sailings won't have capacity data)
+                routeMap.set(key, {
+                    ...route,
+                    sailings: route.sailings.map(s => ({ ...s, fill: 0 }))
+                });
+            }
+        });
+    }
+
+    return Array.from(routeMap.values());
+}
+
+// Fetch ferry data - from BOTH capacity and noncapacity APIs
 async function fetchFerryData() {
     try {
         showLoading();
         hideError();
 
-        const response = await fetch(BC_FERRIES_API);
+        // Fetch from both endpoints in parallel
+        const [capacityResponse, nonCapacityResponse] = await Promise.all([
+            fetch(BC_FERRIES_API_CAPACITY),
+            fetch(BC_FERRIES_API_NONCAPACITY)
+        ]);
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (!capacityResponse.ok || !nonCapacityResponse.ok) {
+            throw new Error(`HTTP error! capacity: ${capacityResponse.status}, noncapacity: ${nonCapacityResponse.status}`);
         }
 
-        const data = await response.json();
+        const [capacityData, nonCapacityData] = await Promise.all([
+            capacityResponse.json(),
+            nonCapacityResponse.json()
+        ]);
 
-        allRoutes = data.routes || [];
+        console.log('Capacity routes:', capacityData.routes?.length || 0);
+        console.log('Non-capacity routes:', nonCapacityData.routes?.length || 0);
+
+        // Merge data from both APIs
+        allRoutes = mergeRoutes(capacityData.routes, nonCapacityData.routes);
+
+        console.log('Merged routes:', allRoutes.length);
+
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
