@@ -17,8 +17,7 @@ const BC_FERRIES_API_ROOT = 'https://bcferriesapi.ca/v2/';
 const BC_FERRIES_API_CAPACITY = 'https://bcferriesapi.ca/v2/capacity/';
 const BC_FERRIES_API_NONCAPACITY = 'https://bcferriesapi.ca/v2/noncapacity/';
 
-// TEMPORARY: Use noncapacity only to debug
-const USE_NONCAPACITY_ONLY = false; // CHANGED BACK TO FALSE - use capacity!
+// Using BOTH endpoints: capacity (has fill %) + noncapacity (has all routes)
 
 // Terminal name mapping
 const terminalNames = {
@@ -213,10 +212,11 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
     const merged = [];
     const sailingMap = new Map();
 
-    // First, add all capacity sailings (they have fill data)
+    // First, add all capacity sailings (they have fill data and sailingStatus)
     if (capacitySailings) {
         capacitySailings.forEach(sailing => {
-            const key = `${sailing.time}-${sailing.sailingStatus}`;
+            // Use just time as key since noncapacity doesn't have sailingStatus
+            const key = sailing.time;
             sailingMap.set(key, sailing);
         });
     }
@@ -224,10 +224,15 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
     // Then, add noncapacity sailings that aren't already in the map
     if (nonCapacitySailings) {
         nonCapacitySailings.forEach(sailing => {
-            const key = `${sailing.time}-${sailing.sailingStatus}`;
+            const key = sailing.time;
             if (!sailingMap.has(key)) {
-                // This sailing isn't in capacity data, add it without fill info
-                sailingMap.set(key, { ...sailing, fill: 0 });
+                // Noncapacity sailings don't have fill or sailingStatus
+                // Add defaults: fill=0, sailingStatus='future' (assume all future)
+                sailingMap.set(key, {
+                    ...sailing,
+                    fill: 0,
+                    sailingStatus: 'future' // Default to future for noncapacity
+                });
             }
         });
     }
@@ -282,31 +287,35 @@ function mergeRoutes(capacityRoutes, nonCapacityRoutes) {
     return Array.from(routeMap.values());
 }
 
-// Fetch ferry data - CAPACITY ONLY (no merge)
+// Fetch ferry data - BOTH endpoints (capacity + noncapacity merged)
 async function fetchFerryData() {
     try {
         showLoading();
         hideError();
 
-        // Just use capacity endpoint - no merge!
-        console.log('Fetching from CAPACITY endpoint ONLY...');
-        const response = await fetch(BC_FERRIES_API_CAPACITY);
+        console.log('Fetching from BOTH capacity and noncapacity endpoints...');
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // Fetch both endpoints in parallel
+        const [capacityResponse, noncapacityResponse] = await Promise.all([
+            fetch(BC_FERRIES_API_CAPACITY),
+            fetch(BC_FERRIES_API_NONCAPACITY)
+        ]);
+
+        if (!capacityResponse.ok || !noncapacityResponse.ok) {
+            throw new Error(`HTTP error! capacity: ${capacityResponse.status}, noncapacity: ${noncapacityResponse.status}`);
         }
 
-        const data = await response.json();
-        console.log('Capacity data routes:', data.routes?.length);
+        const capacityData = await capacityResponse.json();
+        const noncapacityData = await noncapacityResponse.json();
 
-        if (data.routes && data.routes.length > 0) {
-            console.log('First route:', data.routes[0]);
-            if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
-                console.log('First sailing:', data.routes[0].sailings[0]);
-            }
-        }
+        console.log('Capacity routes:', capacityData.routes?.length || 0);
+        console.log('Non-capacity routes:', noncapacityData.routes?.length || 0);
 
-        allRoutes = data.routes || [];
+        // Merge the two datasets - capacity data takes priority, noncapacity fills in gaps
+        allRoutes = mergeRoutes(capacityData.routes, noncapacityData.routes);
+
+        console.log('Merged routes:', allRoutes.length);
+
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
