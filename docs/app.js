@@ -114,8 +114,10 @@ function isTomorrowSailing(sailing, allSailings) {
         .find(s => s.sailingStatus === 'current' || s.sailingStatus === 'past');
 
     if (!lastSailing || !lastSailing.time) {
-        console.log(`    ❌ No current/past sailing found to compare against`);
-        return false;
+        // No current/past sailing found - this means all sailings are future
+        // If it's late at night, ALL future sailings are tomorrow
+        console.log(`    ⚠️ No current/past sailing found - assuming all future are tomorrow`);
+        return true; // CHANGED FROM FALSE TO TRUE
     }
 
     console.log(`    Comparing against last sailing: ${lastSailing.time} (${lastSailing.sailingStatus})`);
