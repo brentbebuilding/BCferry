@@ -76,7 +76,18 @@ function filterSailingsByDay(sailings, dayFilter) {
         return sailings;
     }
 
-    return sailings.filter(sailing => getSailingDay(sailing.time) === dayFilter);
+    // Debug logging
+    console.log(`Filtering for: ${dayFilter}`);
+    console.log('Total sailings:', sailings.length);
+
+    const filtered = sailings.filter(sailing => {
+        const day = getSailingDay(sailing.time);
+        console.log(`Sailing time: ${sailing.time}, detected as: ${day}`);
+        return day === dayFilter;
+    });
+
+    console.log(`Filtered sailings (${dayFilter}):`, filtered.length);
+    return filtered;
 }
 
 // Get capacity level
@@ -110,6 +121,15 @@ async function fetchFerryData() {
         }
 
         const data = await response.json();
+
+        // Debug: log API response structure
+        console.log('API Response:', data);
+        if (data.routes && data.routes.length > 0) {
+            console.log('First route:', data.routes[0]);
+            if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
+                console.log('First sailing:', data.routes[0].sailings[0]);
+            }
+        }
 
         allRoutes = data.routes || [];
         updateRouteFilter();
