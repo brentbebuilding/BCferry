@@ -368,6 +368,14 @@ function displayRoutes() {
         return;
     }
 
+    // DEBUG: Log each route's sailings count
+    filteredRoutes.forEach(route => {
+        const selectedDay = dayFilter.value;
+        const totalSailings = route.sailings?.length || 0;
+        const filteredSailings = route.sailings ? filterSailingsByStatus(route.sailings, selectedDay).length : 0;
+        console.log(`${route.fromTerminalCode}→${route.toTerminalCode}: ${totalSailings} total, ${filteredSailings} after ${selectedDay} filter`);
+    });
+
     routesContainer.innerHTML = filteredRoutes.map(route => createRouteCard(route)).join('');
 }
 
