@@ -16,7 +16,7 @@ const BC_FERRIES_API_CAPACITY = 'https://www.bcferriesapi.ca/v2/capacity/';
 const BC_FERRIES_API_NONCAPACITY = 'https://www.bcferriesapi.ca/v2/noncapacity/';
 
 // TEMPORARY: Use noncapacity only to debug
-const USE_NONCAPACITY_ONLY = true;
+const USE_NONCAPACITY_ONLY = false; // CHANGED BACK TO FALSE - use capacity!
 
 // Terminal name mapping
 const terminalNames = {
