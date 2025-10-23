@@ -15,6 +15,9 @@ const refreshBtn = document.getElementById('refreshBtn');
 const BC_FERRIES_API_CAPACITY = 'https://www.bcferriesapi.ca/v2/capacity/';
 const BC_FERRIES_API_NONCAPACITY = 'https://www.bcferriesapi.ca/v2/noncapacity/';
 
+// TEMPORARY: Use noncapacity only to debug
+const USE_NONCAPACITY_ONLY = true;
+
 // Terminal name mapping
 const terminalNames = {
     'TSA': 'Tsawwassen',
@@ -285,6 +288,31 @@ async function fetchFerryData() {
     try {
         showLoading();
         hideError();
+
+        if (USE_NONCAPACITY_ONLY) {
+            // TEMPORARY: Use only noncapacity to debug tomorrow's sailings
+            console.log('Fetching from NONCAPACITY only...');
+            const response = await fetch(BC_FERRIES_API_NONCAPACITY);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Noncapacity data:', data);
+            console.log('Routes count:', data.routes?.length);
+
+            if (data.routes && data.routes.length > 0) {
+                console.log('First route:', data.routes[0]);
+                console.log('First route sailings:', data.routes[0].sailings);
+            }
+
+            allRoutes = data.routes || [];
+            updateRouteFilter();
+            filterAndDisplayRoutes();
+            updateLastUpdated();
+            return;
+        }
 
         // Fetch from both endpoints in parallel
         const [capacityResponse, nonCapacityResponse] = await Promise.all([
