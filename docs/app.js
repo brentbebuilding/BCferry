@@ -446,54 +446,20 @@ function createRouteCard(route) {
     `;
 }
 
-// Create sailing card HTML
+// Create sailing card HTML - SHOW RAW DATA
 function createSailingCard(sailing) {
     const time = sailing.time || 'N/A';
-    const statusLabel = getStatusLabel(sailing);
-    const capacityPercent = sailing.fill || '0';
-    const capacityLevel = getCapacityLevel(capacityPercent);
-    const capacityText = getCapacityText(capacityPercent);
 
-    // Clean vessel name (remove date if present)
-    let vesselName = sailing.vesselName || '';
-    if (vesselName.includes('(')) {
-        vesselName = vesselName.replace(/\([^)]+\)\s*/, '').trim();
-    }
-
-    // Determine status badge
-    let statusBadge = '';
-    if (sailing.sailingStatus === 'current') {
-        statusBadge = '<span class="status-badge status-on-time">Departing Now</span>';
-    } else if (sailing.sailingStatus === 'past') {
-        statusBadge = '<span class="status-badge">Departed</span>';
-    } else if (sailing.sailingStatus === 'future') {
-        statusBadge = '<span class="status-badge status-on-time">Upcoming</span>';
-    }
+    // Show ALL fields in the sailing object
+    const allFields = Object.keys(sailing).map(key => {
+        return `${key}: "${sailing[key]}"`;
+    }).join('<br>');
 
     return `
         <div class="sailing-card">
-            <div class="sailing-time">${time} ${statusLabel ? `<span style="font-size: 0.85rem; color: #666; font-weight: normal;">- ${statusLabel}</span>` : ''}</div>
-            <div class="sailing-info">
-                ${statusBadge ? `
-                <div class="info-row">
-                    <span class="info-label">Status:</span>
-                    ${statusBadge}
-                </div>
-                ` : ''}
-                <div class="info-row">
-                    <span class="info-label">Capacity:</span>
-                    <span class="capacity-badge capacity-${capacityLevel}">${capacityPercent}%</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label"></span>
-                    <span style="font-size: 0.85rem; color: #666;">${capacityText}</span>
-                </div>
-                ${vesselName ? `
-                <div class="info-row">
-                    <span class="info-label">Vessel:</span>
-                    <span>${vesselName}</span>
-                </div>
-                ` : ''}
+            <div class="sailing-time" style="font-weight: bold; margin-bottom: 10px;">${time}</div>
+            <div style="font-size: 0.8rem; line-height: 1.4; color: #333;">
+                ${allFields}
             </div>
         </div>
     `;
