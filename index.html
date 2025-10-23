@@ -2,59 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=./docs/index.html">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BC Ferry Tracker - Redirecting...</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #003f87, #00aeef);
-            color: white;
-        }
-        .container {
-            text-align: center;
-        }
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        a {
-            color: #00aeef;
-            background: white;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 5px;
-            display: inline-block;
-            margin-top: 20px;
-        }
-    </style>
+    <title>BC Ferry Tracker</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>BC Ferry Tracker</h1>
-        <div class="spinner"></div>
-        <p>Redirecting to application...</p>
-        <p>If you are not redirected, <a href="./docs/index.html">click here</a>.</p>
+        <header>
+            <h1>BC Ferry Tracker</h1>
+            <p class="subtitle">Real-time ferry schedules and capacity information</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="routeFilter">Filter by Route:</label>
+                <select id="routeFilter">
+                    <option value="all">All Routes</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button id="refreshBtn" class="btn-primary">Refresh Data</button>
+            </div>
+            <div class="last-updated">
+                <span id="lastUpdated">Loading...</span>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading">
+            <div class="spinner"></div>
+            <p>Loading ferry data...</p>
+        </div>
+
+        <div id="errorMessage" class="error" style="display: none;"></div>
+
+        <div id="routesContainer" class="routes-container">
+            <!-- Routes will be dynamically inserted here -->
+        </div>
     </div>
-    <script>
-        // Backup redirect in case meta refresh doesn't work
-        setTimeout(function() {
-            window.location.href = './docs/index.html';
-        }, 100);
-    </script>
+
+    <footer>
+        <p>Data provided by <a href="https://www.bcferriesapi.ca" target="_blank">BC Ferries API</a></p>
+        <p>Not affiliated with BC Ferries. For official information, visit <a href="https://www.bcferries.com" target="_blank">bcferries.com</a></p>
+    </footer>
+
+    <script src="app.js"></script>
 </body>
 </html>
