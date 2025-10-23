@@ -95,11 +95,13 @@ function getSailingDay(timeString) {
 function isTomorrowSailing(sailing, allSailings) {
     // If vesselName starts with a date like "(Oct 24, 2025)", it's definitely tomorrow
     if (sailing.vesselName && sailing.vesselName.trim().startsWith('(')) {
+        console.log(`    ✅ Has date prefix in vesselName`);
         return true;
     }
 
     // If it's not a future sailing, it can't be tomorrow
     if (sailing.sailingStatus !== 'future') {
+        console.log(`    ❌ Not future status (${sailing.sailingStatus})`);
         return false;
     }
 
@@ -109,9 +111,11 @@ function isTomorrowSailing(sailing, allSailings) {
         .find(s => s.sailingStatus === 'current' || s.sailingStatus === 'past');
 
     if (!lastSailing || !lastSailing.time) {
-        // If no current/past sailing, assume all future sailings are today
+        console.log(`    ❌ No current/past sailing found to compare against`);
         return false;
     }
+
+    console.log(`    Comparing against last sailing: ${lastSailing.time} (${lastSailing.sailingStatus})`);
 
     // Convert times to comparable format (24-hour)
     const parseTime = (timeStr) => {
@@ -131,34 +135,54 @@ function isTomorrowSailing(sailing, allSailings) {
     const currentTimeMinutes = parseTime(lastSailing.time);
     const sailingTimeMinutes = parseTime(sailing.time);
 
+    console.log(`    Current time minutes: ${currentTimeMinutes}, Sailing time minutes: ${sailingTimeMinutes}`);
+
     if (currentTimeMinutes === null || sailingTimeMinutes === null) {
+        console.log(`    ❌ Could not parse times`);
         return false;
     }
 
     // If the future sailing time is less than current time, it must be tomorrow
     // Example: current is 7:26 PM (1166 mins), sailing is 6:15 AM (375 mins)
-    return sailingTimeMinutes < currentTimeMinutes;
+    const isTomorrow = sailingTimeMinutes < currentTimeMinutes;
+    console.log(`    ${sailingTimeMinutes} < ${currentTimeMinutes} = ${isTomorrow}`);
+    return isTomorrow;
 }
 
 // Filter sailings by status (for day filter)
 function filterSailingsByStatus(sailings, dayFilter) {
+    console.log(`\n=== Filtering sailings, dayFilter: ${dayFilter} ===`);
+    console.log(`Total sailings to filter: ${sailings.length}`);
+
     if (dayFilter === 'all') {
-        return sailings.filter(s => s.time); // Only show sailings with a time
+        const result = sailings.filter(s => s.time);
+        console.log(`All sailings with time: ${result.length}`);
+        return result;
     }
 
     if (dayFilter === 'today') {
         // Today's sailings: past, current, or future that are NOT tomorrow
-        return sailings.filter(s => {
+        const result = sailings.filter(s => {
             if (!s.time) return false;
             if (s.sailingStatus === 'past' || s.sailingStatus === 'current') return true;
             return !isTomorrowSailing(s, sailings);
         });
+        console.log(`Today's sailings: ${result.length}`);
+        return result;
     } else if (dayFilter === 'tomorrow') {
         // Tomorrow's sailings
-        return sailings.filter(s => {
-            if (!s.time) return false;
-            return isTomorrowSailing(s, sailings);
+        console.log('Checking each sailing for tomorrow:');
+        const result = sailings.filter(s => {
+            if (!s.time) {
+                console.log(`  ❌ No time`);
+                return false;
+            }
+            const isTomorrow = isTomorrowSailing(s, sailings);
+            console.log(`  ${s.time} (${s.sailingStatus}) - vessel: "${s.vesselName}" - isTomorrow: ${isTomorrow}`);
+            return isTomorrow;
         });
+        console.log(`Tomorrow's sailings found: ${result.length}`);
+        return result;
     }
 
     return sailings.filter(s => s.time);
