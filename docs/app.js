@@ -141,16 +141,28 @@ async function fetchFerryData() {
 
         const data = await response.json();
 
-        // Debug: log API response structure
-        console.log('API Response:', data);
-        if (data.routes && data.routes.length > 0) {
-            console.log('First route:', data.routes[0]);
-            if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
-                console.log('First sailing:', data.routes[0].sailings[0]);
-            }
+        // Debug: log full API response to understand structure
+        console.log('Full API Response:', data);
+        console.log('Response type:', typeof data);
+        console.log('Response keys:', Object.keys(data));
+
+        // Check if it's an array or has a different structure
+        if (Array.isArray(data)) {
+            console.log('Data is an array, first item:', data[0]);
+            allRoutes = data;
+        } else if (data.routes) {
+            console.log('Data has routes property:', data.routes);
+            allRoutes = data.routes;
+        } else {
+            console.log('Unknown data structure, using as-is');
+            allRoutes = [];
         }
 
-        allRoutes = data.routes || [];
+        console.log('All routes:', allRoutes);
+        if (allRoutes.length > 0) {
+            console.log('First route details:', allRoutes[0]);
+        }
+
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
