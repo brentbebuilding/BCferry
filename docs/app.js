@@ -7,6 +7,7 @@ const routesContainer = document.getElementById('routesContainer');
 const loadingIndicator = document.getElementById('loadingIndicator');
 const errorMessage = document.getElementById('errorMessage');
 const lastUpdated = document.getElementById('lastUpdated');
+const dayFilter = document.getElementById('dayFilter');
 const routeFilter = document.getElementById('routeFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 
@@ -46,6 +47,36 @@ function formatTime(timeString) {
         minute: '2-digit',
         hour12: true
     });
+}
+
+// Check if a sailing is today, tomorrow, or another day
+function getSailingDay(timeString) {
+    if (!timeString) return null;
+
+    const sailingDate = new Date(timeString);
+    const now = new Date();
+
+    // Reset time parts to compare dates only
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const sailingDay = new Date(sailingDate.getFullYear(), sailingDate.getMonth(), sailingDate.getDate());
+
+    if (sailingDay.getTime() === today.getTime()) {
+        return 'today';
+    } else if (sailingDay.getTime() === tomorrow.getTime()) {
+        return 'tomorrow';
+    } else {
+        return 'other';
+    }
+}
+
+// Filter sailings by day
+function filterSailingsByDay(sailings, dayFilter) {
+    if (dayFilter === 'all') {
+        return sailings;
+    }
+
+    return sailings.filter(sailing => getSailingDay(sailing.time) === dayFilter);
 }
 
 // Get capacity level
@@ -149,8 +180,15 @@ function displayRoutes() {
 function createRouteCard(route) {
     const fromName = getTerminalName(route.fromTerminal);
     const toName = getTerminalName(route.toTerminal);
-    const sailingsHTML = route.sailings && route.sailings.length > 0
-        ? route.sailings.map(sailing => createSailingCard(sailing)).join('')
+
+    // Filter sailings by selected day
+    const selectedDay = dayFilter.value;
+    const filteredSailings = route.sailings && route.sailings.length > 0
+        ? filterSailingsByDay(route.sailings, selectedDay)
+        : [];
+
+    const sailingsHTML = filteredSailings.length > 0
+        ? filteredSailings.map(sailing => createSailingCard(sailing)).join('')
         : '<div class="no-sailings">No sailings scheduled</div>';
 
     return `
@@ -243,6 +281,7 @@ function updateLastUpdated() {
 
 // Event listeners
 refreshBtn.addEventListener('click', fetchFerryData);
+dayFilter.addEventListener('change', filterAndDisplayRoutes);
 routeFilter.addEventListener('change', filterAndDisplayRoutes);
 
 // Auto-refresh every 5 minutes
