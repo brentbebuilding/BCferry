@@ -49,23 +49,24 @@ function formatTime(timeString) {
     });
 }
 
-// Format date
-function formatDate(timeString) {
-    if (!timeString) return '';
-    const date = new Date(timeString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+// Get status label for sailing
+function getStatusLabel(sailing) {
+    if (!sailing.sailingStatus) return '';
 
-    // Compare just the date part
-    const dateStr = date.toDateString();
-    const todayStr = today.toDateString();
-    const tomorrowStr = tomorrow.toDateString();
+    // Check if vessel name contains a date (tomorrow's sailings)
+    if (sailing.vesselName && sailing.vesselName.includes('202')) {
+        const match = sailing.vesselName.match(/\(([^)]+)\)/);
+        if (match) {
+            return match[1]; // Returns the date like "Oct 24, 2025"
+        }
+    }
 
-    if (dateStr === todayStr) return 'Today';
-    if (dateStr === tomorrowStr) return 'Tomorrow';
+    // Otherwise use sailing status
+    if (sailing.sailingStatus === 'current') return 'Departing Now';
+    if (sailing.sailingStatus === 'past') return 'Departed';
+    if (sailing.sailingStatus === 'future') return 'Upcoming';
 
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return '';
 }
 
 // Check if a sailing is today, tomorrow, or another day
@@ -89,24 +90,23 @@ function getSailingDay(timeString) {
     }
 }
 
-// Filter sailings by day
-function filterSailingsByDay(sailings, dayFilter) {
+// Filter sailings by status (for day filter)
+function filterSailingsByStatus(sailings, dayFilter) {
     if (dayFilter === 'all') {
-        return sailings;
+        return sailings.filter(s => s.time); // Only show sailings with a time
     }
 
-    // Debug logging
-    console.log(`Filtering for: ${dayFilter}`);
-    console.log('Total sailings:', sailings.length);
+    // Note: The API doesn't provide actual dates, only status
+    // "future" sailings are upcoming (could be today or tomorrow)
+    // We can't reliably distinguish between today's future and tomorrow's sailings
+    if (dayFilter === 'today') {
+        return sailings.filter(s => s.sailingStatus === 'current' || s.sailingStatus === 'future' && s.time);
+    } else if (dayFilter === 'tomorrow') {
+        // Tomorrow's sailings might have date in vesselName like "(Oct 24, 2025)"
+        return sailings.filter(s => s.vesselName && s.vesselName.includes('202') && s.time);
+    }
 
-    const filtered = sailings.filter(sailing => {
-        const day = getSailingDay(sailing.time);
-        console.log(`Sailing time: ${sailing.time}, detected as: ${day}`);
-        return day === dayFilter;
-    });
-
-    console.log(`Filtered sailings (${dayFilter}):`, filtered.length);
-    return filtered;
+    return sailings.filter(s => s.time);
 }
 
 // Get capacity level
@@ -141,28 +141,7 @@ async function fetchFerryData() {
 
         const data = await response.json();
 
-        // Debug: log full API response to understand structure
-        console.log('Full API Response:', data);
-        console.log('Response type:', typeof data);
-        console.log('Response keys:', Object.keys(data));
-
-        // Check if it's an array or has a different structure
-        if (Array.isArray(data)) {
-            console.log('Data is an array, first item:', data[0]);
-            allRoutes = data;
-        } else if (data.routes) {
-            console.log('Data has routes property:', data.routes);
-            allRoutes = data.routes;
-        } else {
-            console.log('Unknown data structure, using as-is');
-            allRoutes = [];
-        }
-
-        console.log('All routes:', allRoutes);
-        if (allRoutes.length > 0) {
-            console.log('First route details:', allRoutes[0]);
-        }
-
+        allRoutes = data.routes || [];
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
@@ -184,10 +163,10 @@ function updateRouteFilter() {
 
     // Add route options
     allRoutes.forEach(route => {
-        const fromName = getTerminalName(route.fromTerminal);
-        const toName = getTerminalName(route.toTerminal);
+        const fromName = getTerminalName(route.fromTerminalCode);
+        const toName = getTerminalName(route.toTerminalCode);
         const option = document.createElement('option');
-        option.value = `${route.fromTerminal}-${route.toTerminal}`;
+        option.value = `${route.fromTerminalCode}-${route.toTerminalCode}`;
         option.textContent = `${fromName} → ${toName}`;
         routeFilter.appendChild(option);
     });
@@ -210,7 +189,7 @@ function filterAndDisplayRoutes() {
     } else {
         const [from, to] = selectedRoute.split('-');
         filteredRoutes = allRoutes.filter(route =>
-            route.fromTerminal === from && route.toTerminal === to
+            route.fromTerminalCode === from && route.toTerminalCode === to
         );
     }
 
@@ -229,13 +208,13 @@ function displayRoutes() {
 
 // Create route card HTML
 function createRouteCard(route) {
-    const fromName = getTerminalName(route.fromTerminal);
-    const toName = getTerminalName(route.toTerminal);
+    const fromName = getTerminalName(route.fromTerminalCode);
+    const toName = getTerminalName(route.toTerminalCode);
 
-    // Filter sailings by selected day
+    // Filter sailings by selected day filter
     const selectedDay = dayFilter.value;
     const filteredSailings = route.sailings && route.sailings.length > 0
-        ? filterSailingsByDay(route.sailings, selectedDay)
+        ? filterSailingsByStatus(route.sailings, selectedDay)
         : [];
 
     const sailingsHTML = filteredSailings.length > 0
@@ -247,7 +226,7 @@ function createRouteCard(route) {
             <div class="route-header">
                 <div>
                     <div class="route-title">${fromName} → ${toName}</div>
-                    <div class="route-direction">${route.fromTerminal} to ${route.toTerminal}</div>
+                    <div class="route-direction">${route.fromTerminalCode} to ${route.toTerminalCode}</div>
                 </div>
             </div>
             <div class="sailings-grid">
@@ -259,30 +238,38 @@ function createRouteCard(route) {
 
 // Create sailing card HTML
 function createSailingCard(sailing) {
-    const time = formatTime(sailing.time);
-    const date = formatDate(sailing.time);
+    const time = sailing.time || 'N/A';
+    const statusLabel = getStatusLabel(sailing);
     const capacityPercent = sailing.fill || '0';
     const capacityLevel = getCapacityLevel(capacityPercent);
     const capacityText = getCapacityText(capacityPercent);
 
-    // Determine status
+    // Clean vessel name (remove date if present)
+    let vesselName = sailing.vesselName || '';
+    if (vesselName.includes('(')) {
+        vesselName = vesselName.replace(/\([^)]+\)\s*/, '').trim();
+    }
+
+    // Determine status badge
     let statusBadge = '';
-    if (sailing.isCancelled) {
-        statusBadge = '<span class="status-badge status-cancelled">Cancelled</span>';
-    } else if (sailing.status && sailing.status.toLowerCase().includes('delay')) {
-        statusBadge = '<span class="status-badge status-delayed">Delayed</span>';
-    } else {
-        statusBadge = '<span class="status-badge status-on-time">On Time</span>';
+    if (sailing.sailingStatus === 'current') {
+        statusBadge = '<span class="status-badge status-on-time">Departing Now</span>';
+    } else if (sailing.sailingStatus === 'past') {
+        statusBadge = '<span class="status-badge">Departed</span>';
+    } else if (sailing.sailingStatus === 'future') {
+        statusBadge = '<span class="status-badge status-on-time">Upcoming</span>';
     }
 
     return `
         <div class="sailing-card">
-            <div class="sailing-time">${time} ${date ? `<span style="font-size: 0.9rem; color: #666; font-weight: normal;">- ${date}</span>` : ''}</div>
+            <div class="sailing-time">${time} ${statusLabel ? `<span style="font-size: 0.85rem; color: #666; font-weight: normal;">- ${statusLabel}</span>` : ''}</div>
             <div class="sailing-info">
+                ${statusBadge ? `
                 <div class="info-row">
                     <span class="info-label">Status:</span>
                     ${statusBadge}
                 </div>
+                ` : ''}
                 <div class="info-row">
                     <span class="info-label">Capacity:</span>
                     <span class="capacity-badge capacity-${capacityLevel}">${capacityPercent}%</span>
@@ -291,10 +278,10 @@ function createSailingCard(sailing) {
                     <span class="info-label"></span>
                     <span style="font-size: 0.85rem; color: #666;">${capacityText}</span>
                 </div>
-                ${sailing.vesselName ? `
+                ${vesselName ? `
                 <div class="info-row">
                     <span class="info-label">Vessel:</span>
-                    <span>${sailing.vesselName}</span>
+                    <span>${vesselName}</span>
                 </div>
                 ` : ''}
             </div>
