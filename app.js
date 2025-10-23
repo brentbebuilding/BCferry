@@ -164,9 +164,27 @@ function isTomorrowSailing(sailing, allSailings) {
     return isTomorrow;
 }
 
-// Filter sailings by status (for day filter) - TEMPORARILY DISABLED
+// Filter sailings by status (for day filter)
 function filterSailingsByStatus(sailings, dayFilter) {
-    // DISABLED - Just show all sailings so we can see the data
+    if (dayFilter === 'all') {
+        return sailings.filter(s => s.time);
+    }
+
+    if (dayFilter === 'today') {
+        // Today's sailings: past, current, or future that are NOT tomorrow
+        return sailings.filter(s => {
+            if (!s.time) return false;
+            if (s.sailingStatus === 'past' || s.sailingStatus === 'current') return true;
+            return !isTomorrowSailing(s, sailings);
+        });
+    } else if (dayFilter === 'tomorrow') {
+        // Tomorrow's sailings
+        return sailings.filter(s => {
+            if (!s.time) return false;
+            return isTomorrowSailing(s, sailings);
+        });
+    }
+
     return sailings.filter(s => s.time);
 }
 
@@ -381,20 +399,53 @@ function createRouteCard(route) {
     `;
 }
 
-// Create sailing card HTML - SHOW RAW DATA
+// Create sailing card HTML - Normal display with capacity
 function createSailingCard(sailing) {
     const time = sailing.time || 'N/A';
+    const capacityPercent = sailing.fill || '0';
+    const capacityLevel = getCapacityLevel(capacityPercent);
+    const capacityText = getCapacityText(capacityPercent);
 
-    // Show ALL fields in the sailing object
-    const allFields = Object.keys(sailing).map(key => {
-        return `${key}: "${sailing[key]}"`;
-    }).join('<br>');
+    // Clean vessel name
+    let vesselName = sailing.vesselName || '';
+    if (vesselName.includes('(')) {
+        vesselName = vesselName.replace(/\([^)]+\)\s*/, '').trim();
+    }
+
+    // Determine status badge
+    let statusBadge = '';
+    if (sailing.sailingStatus === 'current') {
+        statusBadge = '<span class="status-badge status-on-time">Departing Now</span>';
+    } else if (sailing.sailingStatus === 'past') {
+        statusBadge = '<span class="status-badge">Departed</span>';
+    } else if (sailing.sailingStatus === 'future') {
+        statusBadge = '<span class="status-badge status-on-time">Upcoming</span>';
+    }
 
     return `
         <div class="sailing-card">
-            <div class="sailing-time" style="font-weight: bold; margin-bottom: 10px;">${time}</div>
-            <div style="font-size: 0.8rem; line-height: 1.4; color: #333;">
-                ${allFields}
+            <div class="sailing-time">${time}</div>
+            <div class="sailing-info">
+                ${statusBadge ? `
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    ${statusBadge}
+                </div>
+                ` : ''}
+                <div class="info-row">
+                    <span class="info-label">Capacity:</span>
+                    <span class="capacity-badge capacity-${capacityLevel}">${capacityPercent}%</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"></span>
+                    <span style="font-size: 0.85rem; color: #666;">${capacityText}</span>
+                </div>
+                ${vesselName ? `
+                <div class="info-row">
+                    <span class="info-label">Vessel:</span>
+                    <span>${vesselName}</span>
+                </div>
+                ` : ''}
             </div>
         </div>
     `;
