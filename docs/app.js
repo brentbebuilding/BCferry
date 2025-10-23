@@ -12,7 +12,7 @@ const routeFilter = document.getElementById('routeFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 
 // BC Ferries API endpoint - calling directly from browser (v2)
-const BC_FERRIES_API = 'https://bcferriesapi.ca/v2/capacity';
+const BC_FERRIES_API = 'https://www.bcferriesapi.ca/v2/capacity/';
 
 // Terminal name mapping
 const terminalNames = {
