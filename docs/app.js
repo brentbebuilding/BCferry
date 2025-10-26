@@ -522,3 +522,185 @@ setInterval(fetchFerryData, 5 * 60 * 1000);
 
 // Initial load
 fetchFerryData();
+
+// ============================================
+// LIVE FERRY TRACKING
+// ============================================
+
+// View toggle elements
+const scheduleViewBtn = document.getElementById('scheduleViewBtn');
+const mapViewBtn = document.getElementById('mapViewBtn');
+const scheduleControls = document.getElementById('scheduleControls');
+const routesContainer2 = document.getElementById('routesContainer');
+const mapContainer = document.getElementById('mapContainer');
+const loadingIndicator2 = document.getElementById('loadingIndicator');
+
+// Map instance
+let map = null;
+let vesselMarkers = {};
+
+// AISStream WebSocket
+let aisSocket = null;
+
+// BC Ferries MMSI numbers (Maritime Mobile Service Identity)
+const BC_FERRIES_VESSELS = {
+    '316001268': 'Spirit of British Columbia',
+    '316011408': 'Coastal Inspiration',
+    '316011409': 'Coastal Celebration',
+    '316011407': 'Coastal Renaissance',
+    '316002980': 'Queen of Alberni',
+    '316003008': 'Queen of Cowichan',
+    '316003020': 'Queen of Oak Bay',
+    '316003032': 'Queen of Coquitlam',
+    '316001256': 'Spirit of Vancouver Island',
+    '316011406': 'Coastal Renaissance',
+    '316002992': 'Queen of Cumberland',
+    '316011410': 'Coastal Inspiration',
+    '316003044': 'Queen of Nanaimo',
+    // Add more MMSI numbers as needed
+};
+
+// Your AISStream API key - GET FREE KEY AT: https://aisstream.io/
+const AISSTREAM_API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your key!
+
+// View toggle functionality
+scheduleViewBtn.addEventListener('click', () => {
+    scheduleViewBtn.classList.add('active');
+    mapViewBtn.classList.remove('active');
+
+    scheduleControls.style.display = 'flex';
+    routesContainer2.style.display = 'flex';
+    loadingIndicator2.style.display = routesContainer2.children.length === 0 ? 'block' : 'none';
+    mapContainer.style.display = 'none';
+
+    // Disconnect WebSocket when leaving map view
+    if (aisSocket) {
+        aisSocket.close();
+        aisSocket = null;
+    }
+});
+
+mapViewBtn.addEventListener('click', () => {
+    mapViewBtn.classList.add('active');
+    scheduleViewBtn.classList.remove('active');
+
+    scheduleControls.style.display = 'none';
+    routesContainer2.style.display = 'none';
+    loadingIndicator2.style.display = 'none';
+    mapContainer.style.display = 'block';
+
+    // Initialize map if not already done
+    if (!map) {
+        initializeMap();
+    }
+
+    // Connect to AISStream
+    connectToAISStream();
+});
+
+// Initialize Leaflet map
+function initializeMap() {
+    // Center on BC coastal waters
+    map = L.map('map').setView([49.2827, -123.1207], 9);
+
+    // Add dark mode tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+    }).addTo(map);
+
+    console.log('Map initialized');
+}
+
+// Connect to AISStream WebSocket
+function connectToAISStream() {
+    if (AISSTREAM_API_KEY === 'YOUR_API_KEY_HERE') {
+        console.log('AISStream API key not configured');
+        return;
+    }
+
+    if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
+        console.log('Already connected to AISStream');
+        return;
+    }
+
+    console.log('Connecting to AISStream...');
+
+    aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
+
+    aisSocket.onopen = function() {
+        console.log('Connected to AISStream');
+
+        const subscription = {
+            APIKey: AISSTREAM_API_KEY,
+            BoundingBoxes: [
+                [[47, -125], [55, -122]]  // BC coastal waters
+            ],
+            FiltersShipMMSI: Object.keys(BC_FERRIES_VESSELS),
+            FilterMessageTypes: ['PositionReport']
+        };
+
+        aisSocket.send(JSON.stringify(subscription));
+        console.log('Subscribed to BC Ferries vessels');
+    };
+
+    aisSocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+
+        if (data.MessageType === 'PositionReport') {
+            updateVesselPosition(data);
+        }
+    };
+
+    aisSocket.onerror = function(error) {
+        console.error('AISStream error:', error);
+    };
+
+    aisSocket.onclose = function() {
+        console.log('Disconnected from AISStream');
+    };
+}
+
+// Update vessel position on map
+function updateVesselPosition(data) {
+    const mmsi = data.MetaData.MMSI;
+    const vesselName = BC_FERRIES_VESSELS[mmsi] || data.MetaData.ShipName || 'Unknown Vessel';
+    const position = data.Message.PositionReport;
+
+    const lat = position.Latitude;
+    const lon = position.Longitude;
+    const speed = position.Sog; // Speed over ground in knots
+    const heading = position.TrueHeading;
+
+    console.log(`${vesselName}: ${lat}, ${lon}, ${speed} knots`);
+
+    // Create or update marker
+    if (vesselMarkers[mmsi]) {
+        // Update existing marker
+        vesselMarkers[mmsi].setLatLng([lat, lon]);
+        vesselMarkers[mmsi].setPopupContent(`
+            <b>${vesselName}</b><br>
+            Speed: ${speed} knots<br>
+            Heading: ${heading}°
+        `);
+    } else {
+        // Create new marker - ferry icon
+        const ferryIcon = L.divIcon({
+            className: 'ferry-marker',
+            html: '🚢',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        const marker = L.marker([lat, lon], { icon: ferryIcon })
+            .addTo(map)
+            .bindPopup(`
+                <b>${vesselName}</b><br>
+                Speed: ${speed} knots<br>
+                Heading: ${heading}°
+            `);
+
+        vesselMarkers[mmsi] = marker;
+    }
+}

@@ -367,6 +367,123 @@ footer p {
     background: var(--bg-hover);
 }
 
+/* View Toggle */
+.view-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+.toggle-btn {
+    padding: 10px 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.toggle-btn:hover {
+    border-color: var(--border-light);
+    background: var(--bg-tertiary);
+}
+
+.toggle-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Map Container */
+.map-container {
+    margin-bottom: 24px;
+}
+
+.map-setup {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+.map-setup h3 {
+    font-size: 1.25rem;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+.map-setup p {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.map-setup ol {
+    margin: 16px 0;
+    padding-left: 24px;
+    color: var(--text-secondary);
+}
+
+.map-setup li {
+    margin-bottom: 8px;
+}
+
+.map-setup code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    color: var(--accent);
+}
+
+.map-setup .note {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.map-setup a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.map-setup a:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
+#map {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+}
+
+/* Ferry marker styling */
+.ferry-marker {
+    font-size: 24px;
+    text-align: center;
+    line-height: 30px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.ferry-marker:hover {
+    transform: scale(1.2);
+    filter: drop-shadow(0 3px 6px rgba(45, 155, 145, 0.6));
+}
+
 @media (max-width: 768px) {
     header h1 {
         font-size: 1.75rem;
