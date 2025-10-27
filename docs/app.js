@@ -669,22 +669,25 @@ function connectToAISStream() {
 
     aisSocket.onopen = function() {
         clearTimeout(connectionTimeout);
-        console.log('✅ Connected to AISStream');
-        statusText.textContent = '✅ Connected - Waiting for ferry data...';
+        console.log('✅ WebSocket OPEN event fired!');
+        statusText.innerHTML = '✅ Connected!<br><small>Sending subscription...</small>';
 
+        // Simplified subscription to test API key validity
         const subscription = {
-            Apikey: AISSTREAM_API_KEY,  // NOTE: Must be "Apikey" not "APIKey"!
-            BoundingBoxes: [
-                [[47, -125], [55, -122]]  // BC coastal waters
-            ],
-            FiltersShipMMSI: Object.keys(BC_FERRIES_VESSELS),
-            FilterMessageTypes: ['PositionReport']
+            Apikey: AISSTREAM_API_KEY,
+            BoundingBoxes: [[[-90, -180], [90, 180]]]  // Worldwide - simpler test
         };
 
-        console.log('📡 Subscription details:', subscription);
-        console.log('🚢 Tracking', Object.keys(BC_FERRIES_VESSELS).length, 'vessels');
-        aisSocket.send(JSON.stringify(subscription));
-        console.log('✅ Subscribed to BC Ferries vessels');
+        console.log('📡 Sending subscription:', JSON.stringify(subscription));
+
+        try {
+            aisSocket.send(JSON.stringify(subscription));
+            console.log('✅ Subscription sent successfully');
+            statusText.innerHTML = '✅ Subscription sent<br><small>Waiting for data...</small>';
+        } catch (err) {
+            console.error('❌ Failed to send subscription:', err);
+            statusText.innerHTML = `❌ Send failed<br><small>${err.message}</small>`;
+        }
     };
 
     let messageCount = 0;
@@ -694,14 +697,26 @@ function connectToAISStream() {
         const data = JSON.parse(event.data);
         messageCount++;
 
-        // Log ALL messages to see what we're receiving
-        console.log('📨 Message received:', data.MessageType, data);
+        console.log('📨 Message received (#' + messageCount + '):', data);
+
+        // Check for error messages from AISStream
+        if (data.error || data.Error) {
+            const errorMsg = data.error || data.Error;
+            console.error('❌ AISStream returned error:', errorMsg);
+            statusText.innerHTML = `❌ API Error<br><small>${errorMsg}</small>`;
+            return;
+        }
+
+        // Success! We're receiving data
+        if (messageCount === 1) {
+            console.log('🎉 First message received - API key is valid!');
+            statusText.innerHTML = `✅ API key valid!<br><small>Received ${messageCount} message(s)</small>`;
+        }
 
         if (data.MessageType === 'PositionReport') {
             console.log('🎯 Position report for MMSI:', data.MetaData?.MMSI);
-            updateVesselPosition(data);
-            vesselCount = Object.keys(vesselMarkers).length;
-            statusText.textContent = `✅ Tracking ${vesselCount} ferr${vesselCount === 1 ? 'y' : 'ies'} (${messageCount} updates)`;
+            // For now just count, not plotting since we're testing worldwide
+            statusText.innerHTML = `✅ Receiving data<br><small>${messageCount} messages received</small>`;
         }
     };
 
