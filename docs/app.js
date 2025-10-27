@@ -561,7 +561,7 @@ const BC_FERRIES_VESSELS = {
 };
 
 // Your AISStream API key - GET FREE KEY AT: https://aisstream.io/
-const AISSTREAM_API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your key!
+const AISSTREAM_API_KEY = '68340377beb0c1e2693b994286f9e2f8d8763af3';
 
 // View toggle functionality
 scheduleViewBtn.addEventListener('click', () => {
