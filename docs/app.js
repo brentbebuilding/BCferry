@@ -215,8 +215,8 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
     // First, add all capacity sailings (they have fill data and sailingStatus)
     if (capacitySailings) {
         capacitySailings.forEach(sailing => {
-            // Use just time as key since noncapacity doesn't have sailingStatus
-            const key = sailing.time;
+            // Normalize time to lowercase for consistent matching (8:40 am vs 8:40 AM)
+            const key = sailing.time ? sailing.time.toLowerCase() : sailing.time;
             sailingMap.set(key, sailing);
         });
     }
@@ -224,7 +224,8 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
     // Then, add noncapacity sailings that aren't already in the map
     if (nonCapacitySailings) {
         nonCapacitySailings.forEach(sailing => {
-            const key = sailing.time;
+            // Normalize time to lowercase for consistent matching
+            const key = sailing.time ? sailing.time.toLowerCase() : sailing.time;
             if (!sailingMap.has(key)) {
                 // Noncapacity sailings don't have fill or sailingStatus
                 // Add defaults: fill=0, sailingStatus='future' (assume all future)
