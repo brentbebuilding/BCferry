@@ -658,17 +658,39 @@ function updateVesselPosition(vessel) {
     const lon = vessel.longitude;
     const speed = vessel.speed || 0;
     const heading = vessel.heading || 0;
+    const route = vessel.route || 'Unknown route';
+    const eta = vessel.eta || 'Unknown';
 
-    console.log(`📍 ${vessel.name}: [${lat.toFixed(4)}, ${lon.toFixed(4)}] @ ${speed} knots`);
+    console.log(`📍 ${vessel.name}: ${route} - ETA: ${eta}`);
+
+    // Create popup content with route and ETA
+    const popupContent = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 200px;">
+            <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; color: #2d9b91;">
+                ${vessel.name}
+            </div>
+            <div style="border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
+                <div style="margin-bottom: 6px;">
+                    <span style="color: #888;">Route:</span><br>
+                    <strong>${route}</strong>
+                </div>
+                <div style="margin-bottom: 6px;">
+                    <span style="color: #888;">ETA:</span> <strong>${eta}</strong>
+                </div>
+                <div style="margin-bottom: 4px;">
+                    <span style="color: #888;">Speed:</span> ${speed.toFixed(1)} knots
+                </div>
+                <div style="margin-bottom: 4px;">
+                    <span style="color: #888;">Heading:</span> ${heading}°
+                </div>
+            </div>
+        </div>
+    `;
 
     if (vesselMarkers[mmsi]) {
         // Update existing marker
         vesselMarkers[mmsi].setLatLng([lat, lon]);
-        vesselMarkers[mmsi].setPopupContent(`
-            <b>${vessel.name}</b><br>
-            Speed: ${speed.toFixed(1)} knots<br>
-            Heading: ${heading}°
-        `);
+        vesselMarkers[mmsi].setPopupContent(popupContent);
     } else {
         // Create new marker - ferry icon
         const ferryIcon = L.divIcon({
@@ -680,11 +702,7 @@ function updateVesselPosition(vessel) {
 
         const marker = L.marker([lat, lon], { icon: ferryIcon })
             .addTo(map)
-            .bindPopup(`
-                <b>${vessel.name}</b><br>
-                Speed: ${speed.toFixed(1)} knots<br>
-                Heading: ${heading}°
-            `);
+            .bindPopup(popupContent);
 
         vesselMarkers[mmsi] = marker;
     }

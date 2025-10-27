@@ -30,6 +30,133 @@ const BC_FERRIES_VESSELS = {
     '316003044': 'Queen of Nanaimo',
 };
 
+// BC Ferry Terminal Locations (lat, lon)
+const TERMINALS = {
+    'TSA': { name: 'Tsawwassen', lat: 49.0074, lon: -123.1299, code: 'TSA' },
+    'SWB': { name: 'Swartz Bay', lat: 48.6884, lon: -123.4113, code: 'SWB' },
+    'DUK': { name: 'Duke Point', lat: 49.1631, lon: -123.8792, code: 'DUK' },
+    'NAN': { name: 'Departure Bay', lat: 49.1947, lon: -123.9543, code: 'NAN' },
+    'HSB': { name: 'Horseshoe Bay', lat: 49.3736, lon: -123.2719, code: 'HSB' },
+    'LNG': { name: 'Langdale', lat: 49.4611, lon: -123.4803, code: 'LNG' },
+    'BOW': { name: 'Bowen Island', lat: 49.3833, lon: -123.3333, code: 'BOW' },
+};
+
+// Major BC Ferry Routes
+const ROUTES = [
+    { from: 'TSA', to: 'SWB', name: 'Tsawwassen - Swartz Bay' },
+    { from: 'SWB', to: 'TSA', name: 'Swartz Bay - Tsawwassen' },
+    { from: 'TSA', to: 'DUK', name: 'Tsawwassen - Duke Point' },
+    { from: 'DUK', to: 'TSA', name: 'Duke Point - Tsawwassen' },
+    { from: 'HSB', to: 'NAN', name: 'Horseshoe Bay - Departure Bay' },
+    { from: 'NAN', to: 'HSB', name: 'Departure Bay - Horseshoe Bay' },
+    { from: 'HSB', to: 'LNG', name: 'Horseshoe Bay - Langdale' },
+    { from: 'LNG', to: 'HSB', name: 'Langdale - Horseshoe Bay' },
+    { from: 'HSB', to: 'BOW', name: 'Horseshoe Bay - Bowen Island' },
+    { from: 'BOW', to: 'HSB', name: 'Bowen Island - Horseshoe Bay' },
+];
+
+// Calculate distance between two points (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+}
+
+// Calculate bearing from point 1 to point 2
+function calculateBearing(lat1, lon1, lat2, lon2) {
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+    const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+              Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    return (bearing + 360) % 360; // Normalize to 0-360
+}
+
+// Determine which route the ferry is on based on position and heading
+function determineRoute(lat, lon, heading) {
+    let closestTerminals = [];
+
+    // Find distances to all terminals
+    for (const [code, terminal] of Object.entries(TERMINALS)) {
+        const distance = calculateDistance(lat, lon, terminal.lat, terminal.lon);
+        closestTerminals.push({ code, terminal, distance });
+    }
+
+    // Sort by distance
+    closestTerminals.sort((a, b) => a.distance - b.distance);
+
+    // Get two closest terminals
+    const closest = closestTerminals[0];
+    const secondClosest = closestTerminals[1];
+
+    // Calculate bearing to each terminal
+    const bearingToClosest = calculateBearing(lat, lon, closest.terminal.lat, closest.terminal.lon);
+    const bearingToSecond = calculateBearing(lat, lon, secondClosest.terminal.lat, secondClosest.terminal.lon);
+
+    // Calculate heading difference (how much the ferry's heading differs from bearing to terminal)
+    const diffToClosest = Math.abs(((heading - bearingToClosest + 180) % 360) - 180);
+    const diffToSecond = Math.abs(((heading - bearingToSecond + 180) % 360) - 180);
+
+    // If heading toward second closest (within 45 degrees), that's the destination
+    if (diffToSecond < 45 && secondClosest.distance < 50) {
+        return {
+            from: closest.code,
+            to: secondClosest.code,
+            fromName: closest.terminal.name,
+            toName: secondClosest.terminal.name,
+            destination: secondClosest.terminal,
+            distanceToDestination: secondClosest.distance,
+            route: `${closest.terminal.name} → ${secondClosest.terminal.name}`
+        };
+    }
+
+    // If heading toward closest terminal
+    if (diffToClosest < 45) {
+        return {
+            from: secondClosest.code,
+            to: closest.code,
+            fromName: secondClosest.terminal.name,
+            toName: closest.terminal.name,
+            destination: closest.terminal,
+            distanceToDestination: closest.distance,
+            route: `${secondClosest.terminal.name} → ${closest.terminal.name}`
+        };
+    }
+
+    // If can't determine, return closest two terminals
+    return {
+        from: closest.code,
+        to: secondClosest.code,
+        fromName: closest.terminal.name,
+        toName: secondClosest.terminal.name,
+        destination: secondClosest.terminal,
+        distanceToDestination: secondClosest.distance,
+        route: `Between ${closest.terminal.name} and ${secondClosest.terminal.name}`
+    };
+}
+
+// Calculate ETA based on distance and speed
+function calculateETA(distanceKm, speedKnots) {
+    if (speedKnots < 1) return 'Stationary';
+
+    const distanceNm = distanceKm * 0.539957; // Convert km to nautical miles
+    const hoursToDestination = distanceNm / speedKnots;
+    const minutesToDestination = Math.round(hoursToDestination * 60);
+
+    if (minutesToDestination < 60) {
+        return `${minutesToDestination} min`;
+    } else {
+        const hours = Math.floor(minutesToDestination / 60);
+        const minutes = minutesToDestination % 60;
+        return `${hours}h ${minutes}m`;
+    }
+}
+
 // Store current vessel positions in memory
 const vesselPositions = {};
 let aisSocket = null;
@@ -80,6 +207,16 @@ function connectToAISStream() {
                 const position = message.Message?.PositionReport;
 
                 if (position && position.Latitude && position.Longitude) {
+                    // Determine route based on position and heading
+                    const routeInfo = determineRoute(
+                        position.Latitude,
+                        position.Longitude,
+                        position.TrueHeading || position.Cog || 0
+                    );
+
+                    // Calculate ETA
+                    const eta = calculateETA(routeInfo.distanceToDestination, position.Sog || 0);
+
                     vesselPositions[mmsi] = {
                         mmsi,
                         name: vesselName,
@@ -88,10 +225,14 @@ function connectToAISStream() {
                         speed: position.Sog || 0,
                         heading: position.TrueHeading || 0,
                         course: position.Cog || 0,
+                        route: routeInfo.route,
+                        from: routeInfo.fromName,
+                        to: routeInfo.toName,
+                        eta: eta,
                         timestamp: new Date().toISOString()
                     };
 
-                    console.log(`🚢 ${vesselName}: [${position.Latitude.toFixed(4)}, ${position.Longitude.toFixed(4)}] @ ${position.Sog} knots`);
+                    console.log(`🚢 ${vesselName}: ${routeInfo.route} - ETA: ${eta} @ ${position.Sog} knots`);
 
                     // Broadcast to all connected WebSocket clients
                     broadcastToClients(vesselPositions[mmsi]);
