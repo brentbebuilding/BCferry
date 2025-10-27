@@ -1,0 +1,13 @@
+# Render Blueprint
+# This file tells Render how to deploy the app
+services:
+  - type: web
+    name: bcferry-ais-tracker
+    env: node
+    region: oregon  # Closest to BC
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: AISSTREAM_API_KEY
+        sync: false  # Set this manually in Render dashboard

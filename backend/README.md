@@ -2,52 +2,58 @@
 
 This is the backend proxy server for the BC Ferry tracker. It connects to AISStream.io and serves vessel position data to the frontend.
 
-## Deployment to Fly.io
+## Deployment to Render (Free!)
 
 ### Prerequisites
-- Fly.io account and CLI installed
+- GitHub account
+- Render account (sign up at https://render.com - it's free!)
 - AISStream.io API key
 
-### Steps
+### Quick Deploy Steps
 
-1. **Login to Fly.io**
-   ```bash
-   fly auth login
-   ```
+1. **Push this code to GitHub** (already done!)
 
-2. **Launch the app (first time only)**
-   ```bash
-   cd backend
-   fly launch --no-deploy
-   ```
+2. **Go to Render Dashboard**
+   - Visit https://dashboard.render.com/
+   - Click "New +" → "Web Service"
 
-   When prompted:
-   - Choose app name (or accept suggested)
-   - Select region (Seattle/sea recommended - closest to BC)
-   - Don't deploy yet
+3. **Connect Your Repository**
+   - Connect your GitHub account
+   - Select the `BCferry` repository
+   - Render will detect the backend folder
 
-3. **Set the API key as a secret**
-   ```bash
-   fly secrets set AISSTREAM_API_KEY=68340377beb0c1e2693b994286f9e2f8d8763af3
-   ```
+4. **Configure the Service**
+   - **Name**: `bcferry-ais-tracker` (or whatever you want)
+   - **Region**: Oregon (closest to BC)
+   - **Branch**: `claude/bc-ferry-tracker-011CUPM3szWoeRrwuXesgHwB` (or your branch name)
+   - **Root Directory**: `backend`
+   - **Runtime**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Plan**: Free
 
-4. **Deploy the app**
-   ```bash
-   fly deploy
-   ```
+5. **Add Environment Variable**
+   - Scroll to "Environment Variables"
+   - Click "Add Environment Variable"
+   - Key: `AISSTREAM_API_KEY`
+   - Value: `68340377beb0c1e2693b994286f9e2f8d8763af3`
 
-5. **Check status**
-   ```bash
-   fly status
-   fly logs
-   ```
+6. **Deploy!**
+   - Click "Create Web Service"
+   - Wait 2-3 minutes for deployment
 
-6. **Get your app URL**
-   ```bash
-   fly info
-   ```
+7. **Get Your URL**
+   - After deployment, you'll see your URL like: `https://bcferry-ais-tracker.onrender.com`
+   - Copy this URL!
 
-   Your backend will be at: `https://your-app-name.fly.dev`
+8. **Update Frontend**
+   - Edit `docs/app.js` line 564
+   - Change `BACKEND_URL` to your Render URL
+   - Commit and push to GitHub
+
+### Alternative: Deploy Button (Even Easier!)
+
+You can also deploy with one click using Render's deploy button. Just make sure to set the `AISSTREAM_API_KEY` environment variable after deployment.
 
 ## API Endpoints
 
@@ -67,21 +73,35 @@ npm start
 
 Visit http://localhost:8080 to see if it's working.
 
-## Updating
+## Important Notes
 
-To deploy updates:
-```bash
-fly deploy
-```
+⚠️ **Free Tier Limitations:**
+- Service spins down after 15 minutes of inactivity
+- Takes 30-60 seconds to wake up on first request
+- Perfect for personal projects!
+
+✅ **For Always-On Service:**
+- Upgrade to Render's paid plan ($7/month)
+- Or use a cron job to ping the service every 10 minutes
 
 ## Monitoring
 
-View logs:
-```bash
-fly logs
-```
+View logs in Render Dashboard:
+- Click your service
+- Click "Logs" tab
+- See real-time logs
 
-Check app status:
-```bash
-fly status
-```
+## Troubleshooting
+
+**Service won't start?**
+- Check that `AISSTREAM_API_KEY` environment variable is set
+- Check logs for errors
+
+**No ferries showing up?**
+- Check `/api/status` endpoint - should show connected
+- Check `/api/vessels` - should show vessel data
+- Ferries may not be broadcasting if they're docked or it's late at night
+
+**WebSocket connection failing from frontend?**
+- Make sure frontend has correct backend URL
+- Check CORS settings (should allow your GitHub Pages domain)

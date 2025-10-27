@@ -560,8 +560,8 @@ const BC_FERRIES_VESSELS = {
     // Add more MMSI numbers as needed
 };
 
-// Backend API URL - UPDATE THIS after deploying to Fly.io
-const BACKEND_URL = 'https://bcferry-ais-tracker.fly.dev';  // Change to your Fly.io app URL
+// Backend API URL - UPDATE THIS after deploying to Render
+const BACKEND_URL = 'https://bcferry-ais-tracker.onrender.com';  // Change to your Render app URL
 
 // Connect to backend WebSocket
 function connectToBackend() {
