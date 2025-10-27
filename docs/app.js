@@ -629,8 +629,15 @@ function connectToAISStream() {
     setupMessage.style.display = 'none';
     mapElement.style.display = 'block';
 
+    // Show connection status
+    const statusDiv = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('statusText');
+    statusDiv.style.display = 'block';
+    statusText.textContent = '⏳ Connecting to AIS Stream...';
+
     if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
         console.log('Already connected to AISStream');
+        statusText.textContent = '✅ Connected - Tracking BC Ferries';
         return;
     }
 
@@ -639,7 +646,8 @@ function connectToAISStream() {
     aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
 
     aisSocket.onopen = function() {
-        console.log('Connected to AISStream');
+        console.log('✅ Connected to AISStream');
+        statusText.textContent = '✅ Connected - Waiting for ferry data...';
 
         const subscription = {
             APIKey: AISSTREAM_API_KEY,
@@ -650,24 +658,38 @@ function connectToAISStream() {
             FilterMessageTypes: ['PositionReport']
         };
 
+        console.log('📡 Subscription details:', subscription);
+        console.log('🚢 Tracking', Object.keys(BC_FERRIES_VESSELS).length, 'vessels');
         aisSocket.send(JSON.stringify(subscription));
-        console.log('Subscribed to BC Ferries vessels');
+        console.log('✅ Subscribed to BC Ferries vessels');
     };
+
+    let messageCount = 0;
+    let vesselCount = 0;
 
     aisSocket.onmessage = function(event) {
         const data = JSON.parse(event.data);
+        messageCount++;
+
+        // Log ALL messages to see what we're receiving
+        console.log('📨 Message received:', data.MessageType, data);
 
         if (data.MessageType === 'PositionReport') {
+            console.log('🎯 Position report for MMSI:', data.MetaData?.MMSI);
             updateVesselPosition(data);
+            vesselCount = Object.keys(vesselMarkers).length;
+            statusText.textContent = `✅ Tracking ${vesselCount} ferr${vesselCount === 1 ? 'y' : 'ies'} (${messageCount} updates)`;
         }
     };
 
     aisSocket.onerror = function(error) {
-        console.error('AISStream error:', error);
+        console.error('❌ AISStream error:', error);
+        statusText.textContent = '❌ Connection error - Check console';
     };
 
     aisSocket.onclose = function() {
-        console.log('Disconnected from AISStream');
+        console.log('⚠️ Disconnected from AISStream');
+        statusText.textContent = '⚠️ Disconnected from AIS Stream';
     };
 }
 
