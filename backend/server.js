@@ -163,6 +163,10 @@ let aisSocket = null;
 let reconnectTimeout = null;
 let connectionStatus = 'disconnected';
 
+// Store current BC Ferries schedule
+let currentSchedule = [];
+let scheduleLastUpdated = null;
+
 // AISStream API key from environment variable
 const AISSTREAM_API_KEY = process.env.AISSTREAM_API_KEY;
 
@@ -172,6 +176,130 @@ if (!AISSTREAM_API_KEY) {
 }
 
 console.log('🔑 API Key loaded:', AISSTREAM_API_KEY.substring(0, 8) + '...');
+
+// Fetch BC Ferries schedule data
+async function fetchBCFerriesSchedule() {
+    try {
+        console.log('📅 Fetching BC Ferries schedule...');
+
+        const [capacityRes, nonCapacityRes] = await Promise.all([
+            fetch('https://bcferriesapi.ca/v2/capacity/'),
+            fetch('https://bcferriesapi.ca/v2/noncapacity/')
+        ]);
+
+        const capacityData = await capacityRes.json();
+        const nonCapacityData = await nonCapacityRes.json();
+
+        // Merge both datasets
+        const allSailings = [];
+
+        // Process capacity data
+        if (capacityData) {
+            for (const [route, sailings] of Object.entries(capacityData)) {
+                if (Array.isArray(sailings)) {
+                    sailings.forEach(sailing => {
+                        allSailings.push({
+                            ...sailing,
+                            routeCode: route
+                        });
+                    });
+                }
+            }
+        }
+
+        // Process non-capacity data
+        if (nonCapacityData) {
+            for (const [route, sailings] of Object.entries(nonCapacityData)) {
+                if (Array.isArray(sailings)) {
+                    sailings.forEach(sailing => {
+                        // Only add if not already in capacity data
+                        const exists = allSailings.some(s =>
+                            s.time === sailing.time &&
+                            s.fromTerminalCode === sailing.fromTerminalCode &&
+                            s.toTerminalCode === sailing.toTerminalCode
+                        );
+                        if (!exists) {
+                            allSailings.push({
+                                ...sailing,
+                                routeCode: route,
+                                sailingStatus: 'future', // Default for noncapacity
+                                fill: 0
+                            });
+                        }
+                    });
+                }
+            }
+        }
+
+        currentSchedule = allSailings;
+        scheduleLastUpdated = new Date();
+        console.log(`✅ Schedule updated: ${allSailings.length} sailings loaded`);
+
+        // Log current sailings
+        const currentSailings = allSailings.filter(s => s.sailingStatus === 'current');
+        console.log(`🚢 Currently sailing: ${currentSailings.length}`);
+        currentSailings.forEach(sailing => {
+            console.log(`   ${sailing.vesselName}: ${sailing.fromTerminalCode} → ${sailing.toTerminalCode}`);
+        });
+
+    } catch (err) {
+        console.error('❌ Error fetching BC Ferries schedule:', err.message);
+    }
+}
+
+// Find current sailing for a vessel by name
+function findCurrentSailing(vesselName) {
+    if (!vesselName || currentSchedule.length === 0) return null;
+
+    // Clean vessel name for matching
+    const cleanName = vesselName.trim().toLowerCase();
+
+    // Find sailings with matching vessel name that are "current" (actively sailing)
+    const currentSailing = currentSchedule.find(sailing => {
+        if (!sailing.vesselName) return false;
+        const sailingVesselName = sailing.vesselName.trim().toLowerCase();
+        return sailingVesselName === cleanName && sailing.sailingStatus === 'current';
+    });
+
+    if (currentSailing) {
+        return {
+            from: currentSailing.fromTerminalCode,
+            to: currentSailing.toTerminalCode,
+            fromName: getTerminalName(currentSailing.fromTerminalCode),
+            toName: getTerminalName(currentSailing.toTerminalCode),
+            route: `${getTerminalName(currentSailing.fromTerminalCode)} → ${getTerminalName(currentSailing.toTerminalCode)}`,
+            scheduledDeparture: currentSailing.time,
+            destination: TERMINALS[currentSailing.toTerminalCode]
+        };
+    }
+
+    // If no current sailing, check for recent departures (might be in between status updates)
+    const recentDeparture = currentSchedule.find(sailing => {
+        if (!sailing.vesselName) return false;
+        const sailingVesselName = sailing.vesselName.trim().toLowerCase();
+        return sailingVesselName === cleanName && sailing.sailingStatus === 'past';
+    });
+
+    if (recentDeparture) {
+        return {
+            from: recentDeparture.fromTerminalCode,
+            to: recentDeparture.toTerminalCode,
+            fromName: getTerminalName(recentDeparture.fromTerminalCode),
+            toName: getTerminalName(recentDeparture.toTerminalCode),
+            route: `${getTerminalName(recentDeparture.fromTerminalCode)} → ${getTerminalName(recentDeparture.toTerminalCode)}`,
+            scheduledDeparture: recentDeparture.time,
+            destination: TERMINALS[recentDeparture.toTerminalCode]
+        };
+    }
+
+    return null;
+}
+
+// Get full terminal name from code
+function getTerminalName(code) {
+    const terminal = TERMINALS[code];
+    return terminal ? terminal.name : code;
+}
 
 // Connect to AISStream
 function connectToAISStream() {
@@ -207,15 +335,30 @@ function connectToAISStream() {
                 const position = message.Message?.PositionReport;
 
                 if (position && position.Latitude && position.Longitude) {
-                    // Determine route based on position and heading
-                    const routeInfo = determineRoute(
-                        position.Latitude,
-                        position.Longitude,
-                        position.TrueHeading || position.Cog || 0
-                    );
+                    // Try to find current sailing from BC Ferries schedule
+                    let routeInfo = findCurrentSailing(vesselName);
+                    let eta = 'Unknown';
+                    let routeSource = 'schedule';
 
-                    // Calculate ETA
-                    const eta = calculateETA(routeInfo.distanceToDestination, position.Sog || 0);
+                    if (routeInfo && routeInfo.destination) {
+                        // Got route from schedule - calculate distance to destination
+                        const distanceToDestination = calculateDistance(
+                            position.Latitude,
+                            position.Longitude,
+                            routeInfo.destination.lat,
+                            routeInfo.destination.lon
+                        );
+                        eta = calculateETA(distanceToDestination, position.Sog || 0);
+                    } else {
+                        // Fallback: guess route based on position and heading
+                        routeInfo = determineRoute(
+                            position.Latitude,
+                            position.Longitude,
+                            position.TrueHeading || position.Cog || 0
+                        );
+                        eta = calculateETA(routeInfo.distanceToDestination, position.Sog || 0);
+                        routeSource = 'estimated';
+                    }
 
                     vesselPositions[mmsi] = {
                         mmsi,
@@ -229,10 +372,11 @@ function connectToAISStream() {
                         from: routeInfo.fromName,
                         to: routeInfo.toName,
                         eta: eta,
+                        routeSource: routeSource, // 'schedule' or 'estimated'
                         timestamp: new Date().toISOString()
                     };
 
-                    console.log(`🚢 ${vesselName}: ${routeInfo.route} - ETA: ${eta} @ ${position.Sog} knots`);
+                    console.log(`🚢 ${vesselName}: ${routeInfo.route} - ETA: ${eta} [${routeSource}]`);
 
                     // Broadcast to all connected WebSocket clients
                     broadcastToClients(vesselPositions[mmsi]);
@@ -318,10 +462,16 @@ app.get('/api/status', (req, res) => {
 });
 
 // Start HTTP server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}`);
     console.log(`📡 API endpoint: http://localhost:${PORT}/api/vessels`);
+
+    // Fetch BC Ferries schedule on startup
+    await fetchBCFerriesSchedule();
+
+    // Update schedule every 5 minutes
+    setInterval(fetchBCFerriesSchedule, 5 * 60 * 1000);
 
     // Connect to AISStream
     connectToAISStream();
