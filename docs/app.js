@@ -457,9 +457,22 @@ function createRouteCard(route) {
 
     // Filter sailings by selected day filter
     const selectedDay = dayFilter.value;
-    const filteredSailings = route.sailings && route.sailings.length > 0
+    let filteredSailings = route.sailings && route.sailings.length > 0
         ? filterSailingsByStatus(route.sailings, selectedDay)
         : [];
+
+    // FINAL DEDUPLICATION: Remove duplicate times (case-insensitive), keep the one with capacity
+    const timeMap = new Map();
+    filteredSailings.forEach(sailing => {
+        const normalizedTime = sailing.time ? sailing.time.toLowerCase() : sailing.time;
+        const existing = timeMap.get(normalizedTime);
+
+        // If no existing, or this one has better capacity data, use it
+        if (!existing || (parseInt(sailing.fill || 0) > parseInt(existing.fill || 0))) {
+            timeMap.set(normalizedTime, sailing);
+        }
+    });
+    filteredSailings = Array.from(timeMap.values());
 
     const sailingsHTML = filteredSailings.length > 0
         ? filteredSailings.map(sailing => createSailingCard(sailing)).join('')
