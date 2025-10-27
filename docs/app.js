@@ -712,7 +712,10 @@ function connectToAISStream() {
         console.error('ReadyState at error:', aisSocket.readyState);
         console.error('Error type:', error.type);
         console.error('Error message:', error.message || 'No message');
-        statusText.textContent = '❌ WebSocket error occurred';
+
+        // Show error on page
+        const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+        statusText.innerHTML = `❌ WebSocket Error<br><small>State: ${readyStateNames[aisSocket.readyState]} (${aisSocket.readyState})</small>`;
     };
 
     aisSocket.onclose = function(event) {
@@ -735,10 +738,12 @@ function connectToAISStream() {
             1011: 'Server error',
             1015: 'TLS handshake failure'
         };
-        console.log('Close code meaning:', closeCodes[event.code] || 'Unknown');
+        const closeMsg = closeCodes[event.code] || 'Unknown';
+        console.log('Close code meaning:', closeMsg);
 
-        if (statusText.textContent.includes('Connecting') || statusText.textContent.includes('Waiting')) {
-            statusText.textContent = `⚠️ Connection closed (code ${event.code})`;
+        // Show close details on page
+        if (statusText.textContent.includes('Connecting') || statusText.textContent.includes('Waiting') || statusText.textContent.includes('Error')) {
+            statusText.innerHTML = `⚠️ Connection Closed<br><small>Code ${event.code}: ${closeMsg}</small><br><small>Reason: ${event.reason || 'None given'}</small>`;
         }
     };
 }
