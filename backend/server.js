@@ -198,12 +198,15 @@ async function fetchBCFerriesSchedule() {
 
         // Process capacity data
         if (capacityData) {
-            for (const [route, sailings] of Object.entries(capacityData)) {
-                if (Array.isArray(sailings)) {
-                    sailings.forEach(sailing => {
+            for (const [routeKey, routeData] of Object.entries(capacityData)) {
+                // Each route has fromTerminalCode, toTerminalCode, and sailings array
+                if (routeData && routeData.sailings && Array.isArray(routeData.sailings)) {
+                    routeData.sailings.forEach(sailing => {
                         allSailings.push({
                             ...sailing,
-                            routeCode: route
+                            fromTerminalCode: routeData.fromTerminalCode,
+                            toTerminalCode: routeData.toTerminalCode,
+                            routeCode: routeKey
                         });
                     });
                 }
@@ -212,21 +215,23 @@ async function fetchBCFerriesSchedule() {
 
         // Process non-capacity data
         if (nonCapacityData) {
-            for (const [route, sailings] of Object.entries(nonCapacityData)) {
-                if (Array.isArray(sailings)) {
-                    sailings.forEach(sailing => {
+            for (const [routeKey, routeData] of Object.entries(nonCapacityData)) {
+                if (routeData && routeData.sailings && Array.isArray(routeData.sailings)) {
+                    routeData.sailings.forEach(sailing => {
                         // Only add if not already in capacity data
                         const exists = allSailings.some(s =>
                             s.time === sailing.time &&
-                            s.fromTerminalCode === sailing.fromTerminalCode &&
-                            s.toTerminalCode === sailing.toTerminalCode
+                            s.fromTerminalCode === routeData.fromTerminalCode &&
+                            s.toTerminalCode === routeData.toTerminalCode
                         );
                         if (!exists) {
                             allSailings.push({
                                 ...sailing,
-                                routeCode: route,
-                                sailingStatus: 'future', // Default for noncapacity
-                                fill: 0
+                                fromTerminalCode: routeData.fromTerminalCode,
+                                toTerminalCode: routeData.toTerminalCode,
+                                routeCode: routeKey,
+                                sailingStatus: sailing.sailingStatus || 'future',
+                                fill: sailing.fill || 0
                             });
                         }
                     });
@@ -280,8 +285,18 @@ function findCurrentSailing(vesselName) {
     // Find sailings with matching vessel name that are "current" (actively sailing)
     const currentSailing = currentSchedule.find(sailing => {
         if (!sailing.vesselName) return false;
-        const sailingVesselName = sailing.vesselName.trim().toLowerCase();
-        return sailingVesselName === cleanName && sailing.sailingStatus === 'current';
+
+        // Clean the schedule vessel name - it might have prefixes like "Delayed approx. 20m"
+        let sailingVesselName = sailing.vesselName.trim().toLowerCase();
+
+        // Remove common prefixes
+        sailingVesselName = sailingVesselName
+            .replace(/^delayed.*?(?=queen|coastal|spirit|salish)/i, '')
+            .trim();
+
+        // Check exact match or if AIS name is contained in schedule name
+        return (sailingVesselName === cleanName || sailingVesselName.includes(cleanName))
+            && sailing.sailingStatus === 'current';
     });
 
     if (currentSailing) {
