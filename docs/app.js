@@ -273,11 +273,15 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
             // If times differ by more than 2 minutes, stop checking
             if (Math.abs(sailingTime - otherTime) > 2) break;
 
-            // If same vessel (or both empty) within 2 minutes, it's a duplicate
+            // Determine if this is a duplicate:
+            // - If exact same time (0 min diff), always treat as duplicate
+            // - If 1-2 min diff, only if same vessel or both have no vessel
+            const timeDiff = Math.abs(sailingTime - otherTime);
+            const exactSameTime = timeDiff === 0;
             const isSameVessel = sailingVessel && otherVessel && sailingVessel === otherVessel;
             const bothEmpty = !sailingVessel && !otherVessel;
 
-            if (isSameVessel || bothEmpty) {
+            if (exactSameTime || isSameVessel || bothEmpty) {
                 // Mark as duplicate
                 used.add(j);
 
