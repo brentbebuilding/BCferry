@@ -167,6 +167,9 @@ let connectionStatus = 'disconnected';
 let currentSchedule = [];
 let scheduleLastUpdated = null;
 
+// Track which vessels we've logged debug info for (to avoid spam)
+const vesselDebugLogged = new Set();
+
 // AISStream API key from environment variable
 const AISSTREAM_API_KEY = process.env.AISSTREAM_API_KEY;
 
@@ -235,6 +238,9 @@ async function fetchBCFerriesSchedule() {
         scheduleLastUpdated = new Date();
         console.log(`✅ Schedule updated: ${allSailings.length} sailings loaded`);
 
+        // Clear debug cache when schedule refreshes
+        vesselDebugLogged.clear();
+
         // Log current sailings
         const currentSailings = allSailings.filter(s => s.sailingStatus === 'current');
         console.log(`🚢 Currently sailing: ${currentSailings.length}`);
@@ -249,10 +255,18 @@ async function fetchBCFerriesSchedule() {
 
 // Find current sailing for a vessel by name
 function findCurrentSailing(vesselName) {
-    if (!vesselName || currentSchedule.length === 0) return null;
+    if (!vesselName || currentSchedule.length === 0) {
+        return null;
+    }
 
     // Clean vessel name for matching
     const cleanName = vesselName.trim().toLowerCase();
+
+    // Only log debug once per vessel (unless schedule refreshes)
+    const shouldDebug = !vesselDebugLogged.has(cleanName);
+    if (shouldDebug) {
+        console.log(`🔍 Looking for vessel: "${cleanName}"`);
+    }
 
     // Find sailings with matching vessel name that are "current" (actively sailing)
     const currentSailing = currentSchedule.find(sailing => {
@@ -262,6 +276,10 @@ function findCurrentSailing(vesselName) {
     });
 
     if (currentSailing) {
+        if (shouldDebug) {
+            console.log(`✅ Found in schedule: ${currentSailing.fromTerminalCode} → ${currentSailing.toTerminalCode} [current]`);
+            vesselDebugLogged.add(cleanName);
+        }
         return {
             from: currentSailing.fromTerminalCode,
             to: currentSailing.toTerminalCode,
@@ -271,6 +289,31 @@ function findCurrentSailing(vesselName) {
             scheduledDeparture: currentSailing.time,
             destination: TERMINALS[currentSailing.toTerminalCode]
         };
+    }
+
+    // Debug: show all sailings for this vessel (any status) - only once
+    if (shouldDebug) {
+        const allForVessel = currentSchedule.filter(sailing => {
+            if (!sailing.vesselName) return false;
+            const sailingVesselName = sailing.vesselName.trim().toLowerCase();
+            return sailingVesselName === cleanName;
+        });
+
+        if (allForVessel.length > 0) {
+            console.log(`⚠️ Found vessel in schedule but not "current": ${allForVessel.length} sailings`);
+            allForVessel.slice(0, 3).forEach(s => {
+                console.log(`   - ${s.fromTerminalCode} → ${s.toTerminalCode} at ${s.time} [${s.sailingStatus}]`);
+            });
+        } else {
+            console.log(`❌ Vessel "${cleanName}" not found in schedule at all`);
+            // Show some example vessel names from schedule
+            const exampleNames = currentSchedule
+                .filter(s => s.vesselName)
+                .slice(0, 5)
+                .map(s => s.vesselName);
+            console.log(`   Example names in schedule: ${exampleNames.join(', ')}`);
+        }
+        vesselDebugLogged.add(cleanName);
     }
 
     // If no current sailing, check for recent departures (might be in between status updates)
