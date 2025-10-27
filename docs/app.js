@@ -641,20 +641,31 @@ function connectToAISStream() {
         return;
     }
 
-    console.log('Connecting to AISStream...');
+    console.log('🔌 Attempting WebSocket connection to wss://stream.aisstream.io/v0/stream');
     console.log('API Key:', AISSTREAM_API_KEY ? AISSTREAM_API_KEY.substring(0, 8) + '...' : 'MISSING');
 
     // Set timeout for connection
     const connectionTimeout = setTimeout(() => {
+        console.log('⚠️ Connection timeout after 10 seconds');
+        console.log('WebSocket final state:', aisSocket ? aisSocket.readyState : 'null');
+        console.log('States: CONNECTING=0, OPEN=1, CLOSING=2, CLOSED=3');
         if (statusText.textContent.includes('Connecting')) {
-            console.log('⚠️ Connection timeout after 10 seconds');
-            statusText.textContent = '⚠️ Connection timeout - Check API key';
+            statusText.textContent = '⚠️ Connection timeout - Retrying...';
+            if (aisSocket) {
+                aisSocket.close();
+            }
         }
     }, 10000);
 
-    aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
-
-    console.log('WebSocket created, readyState:', aisSocket.readyState);
+    try {
+        aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
+        console.log('✅ WebSocket object created, initial readyState:', aisSocket.readyState, '(0=CONNECTING)');
+    } catch (err) {
+        clearTimeout(connectionTimeout);
+        console.error('❌ Failed to create WebSocket:', err);
+        statusText.textContent = '❌ WebSocket creation failed';
+        return;
+    }
 
     aisSocket.onopen = function() {
         clearTimeout(connectionTimeout);
@@ -696,17 +707,38 @@ function connectToAISStream() {
 
     aisSocket.onerror = function(error) {
         clearTimeout(connectionTimeout);
-        console.error('❌ AISStream WebSocket error:', error);
-        console.error('ReadyState:', aisSocket.readyState);
-        statusText.textContent = '❌ Connection failed - Invalid API key?';
+        console.error('❌ WebSocket ERROR event fired');
+        console.error('Error object:', error);
+        console.error('ReadyState at error:', aisSocket.readyState);
+        console.error('Error type:', error.type);
+        console.error('Error message:', error.message || 'No message');
+        statusText.textContent = '❌ WebSocket error occurred';
     };
 
     aisSocket.onclose = function(event) {
         clearTimeout(connectionTimeout);
-        console.log('⚠️ WebSocket closed. Code:', event.code, 'Reason:', event.reason);
+        console.log('⚠️ WebSocket CLOSE event fired');
+        console.log('Close code:', event.code);
+        console.log('Close reason:', event.reason || '(no reason provided)');
         console.log('Was clean close:', event.wasClean);
+        console.log('ReadyState at close:', aisSocket.readyState);
+
+        // Common WebSocket close codes
+        const closeCodes = {
+            1000: 'Normal closure',
+            1001: 'Going away',
+            1002: 'Protocol error',
+            1003: 'Unsupported data',
+            1006: 'Abnormal closure (no close frame)',
+            1008: 'Policy violation',
+            1009: 'Message too big',
+            1011: 'Server error',
+            1015: 'TLS handshake failure'
+        };
+        console.log('Close code meaning:', closeCodes[event.code] || 'Unknown');
+
         if (statusText.textContent.includes('Connecting') || statusText.textContent.includes('Waiting')) {
-            statusText.textContent = '⚠️ Connection closed - Check API key';
+            statusText.textContent = `⚠️ Connection closed (code ${event.code})`;
         }
     };
 }
