@@ -219,8 +219,10 @@ async function fetchBCFerriesSchedule() {
                 if (routeData && routeData.sailings && Array.isArray(routeData.sailings)) {
                     routeData.sailings.forEach(sailing => {
                         // Only add if not already in capacity data
+                        // Normalize time to lowercase for case-insensitive comparison
+                        const sailingTime = sailing.time ? sailing.time.toLowerCase() : sailing.time;
                         const exists = allSailings.some(s =>
-                            s.time === sailing.time &&
+                            s.time && s.time.toLowerCase() === sailingTime &&
                             s.fromTerminalCode === routeData.fromTerminalCode &&
                             s.toTerminalCode === routeData.toTerminalCode
                         );

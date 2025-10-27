@@ -243,19 +243,9 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
         });
     }
 
-    console.log(`🔍 MERGE DEBUG: Starting with ${allSailings.length} total sailings`);
-    allSailings.forEach((s, idx) => {
-        console.log(`  [${idx}] ${s.time} | vessel: "${s.vesselName || 'NONE'}" | fill: ${s.fill}% | source: ${s.source}`);
-    });
-
     // Sort by time
     allSailings.sort((a, b) => {
         return (parseTimeToMinutes(a.time) || 0) - (parseTimeToMinutes(b.time) || 0);
-    });
-
-    console.log(`🔍 After sorting:`);
-    allSailings.forEach((s, idx) => {
-        console.log(`  [${idx}] ${s.time} (${parseTimeToMinutes(s.time)} min) | vessel: "${s.vesselName || 'NONE'}" | fill: ${s.fill}%`);
     });
 
     // Remove duplicates - keep sailings with capacity data over those without
@@ -291,11 +281,7 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
             const isSameVessel = sailingVessel && otherVessel && sailingVessel === otherVessel;
             const bothEmpty = !sailingVessel && !otherVessel;
 
-            console.log(`    🔍 Comparing [${i}] ${sailing.time} with [${j}] ${otherSailing.time}:`);
-            console.log(`       timeDiff: ${timeDiff}, exactSameTime: ${exactSameTime}, isSameVessel: ${isSameVessel}, bothEmpty: ${bothEmpty}`);
-
             if (exactSameTime || isSameVessel || bothEmpty) {
-                console.log(`       ✅ DUPLICATE FOUND! Marking [${j}] as used`);
                 // Mark as duplicate
                 used.add(j);
 
@@ -304,19 +290,16 @@ function mergeSailings(capacitySailings, nonCapacitySailings) {
                 const otherHasCapacity = otherSailing.fill && parseInt(otherSailing.fill) > 0;
 
                 if (otherHasCapacity && !bestHasCapacity) {
-                    console.log(`       🔄 Switching to [${j}] because it has capacity data`);
                     bestMatch = otherSailing;
                     bestMatchIndex = j;
                 }
             }
         }
 
-        console.log(`  ✅ Adding to deduplicated: [${bestMatchIndex}] ${bestMatch.time} | ${bestMatch.vesselName || 'NONE'} | ${bestMatch.fill}%`);
         deduplicated.push(bestMatch);
         used.add(bestMatchIndex);
     }
 
-    console.log(`🔍 MERGE RESULT: Returning ${deduplicated.length} deduplicated sailings`);
     return deduplicated;
 }
 
