@@ -241,12 +241,21 @@ async function fetchBCFerriesSchedule() {
         // Clear debug cache when schedule refreshes
         vesselDebugLogged.clear();
 
+        // Debug: Show sample sailing to see what fields are available
+        if (allSailings.length > 0) {
+            console.log('📋 Sample sailing data:', JSON.stringify(allSailings[0], null, 2));
+        }
+
         // Log current sailings
         const currentSailings = allSailings.filter(s => s.sailingStatus === 'current');
         console.log(`🚢 Currently sailing: ${currentSailings.length}`);
         currentSailings.forEach(sailing => {
-            console.log(`   ${sailing.vesselName}: ${sailing.fromTerminalCode} → ${sailing.toTerminalCode}`);
+            console.log(`   ${sailing.vesselName || 'NO NAME'}: ${sailing.fromTerminalCode} → ${sailing.toTerminalCode}`);
         });
+
+        // Count how many have vessel names
+        const withNames = allSailings.filter(s => s.vesselName).length;
+        console.log(`📊 Sailings with vessel names: ${withNames}/${allSailings.length}`);
 
     } catch (err) {
         console.error('❌ Error fetching BC Ferries schedule:', err.message);
