@@ -615,10 +615,19 @@ function initializeMap() {
 
 // Connect to AISStream WebSocket
 function connectToAISStream() {
+    const setupMessage = document.getElementById('mapSetupMessage');
+    const mapElement = document.getElementById('map');
+
     if (AISSTREAM_API_KEY === 'YOUR_API_KEY_HERE') {
         console.log('AISStream API key not configured');
+        setupMessage.style.display = 'block';
+        mapElement.style.display = 'none';
         return;
     }
+
+    // Hide setup message and show map
+    setupMessage.style.display = 'none';
+    mapElement.style.display = 'block';
 
     if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
         console.log('Already connected to AISStream');
