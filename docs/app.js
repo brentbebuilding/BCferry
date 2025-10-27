@@ -642,10 +642,22 @@ function connectToAISStream() {
     }
 
     console.log('Connecting to AISStream...');
+    console.log('API Key:', AISSTREAM_API_KEY ? AISSTREAM_API_KEY.substring(0, 8) + '...' : 'MISSING');
+
+    // Set timeout for connection
+    const connectionTimeout = setTimeout(() => {
+        if (statusText.textContent.includes('Connecting')) {
+            console.log('⚠️ Connection timeout after 10 seconds');
+            statusText.textContent = '⚠️ Connection timeout - Check API key';
+        }
+    }, 10000);
 
     aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
 
+    console.log('WebSocket created, readyState:', aisSocket.readyState);
+
     aisSocket.onopen = function() {
+        clearTimeout(connectionTimeout);
         console.log('✅ Connected to AISStream');
         statusText.textContent = '✅ Connected - Waiting for ferry data...';
 
@@ -683,13 +695,19 @@ function connectToAISStream() {
     };
 
     aisSocket.onerror = function(error) {
-        console.error('❌ AISStream error:', error);
-        statusText.textContent = '❌ Connection error - Check console';
+        clearTimeout(connectionTimeout);
+        console.error('❌ AISStream WebSocket error:', error);
+        console.error('ReadyState:', aisSocket.readyState);
+        statusText.textContent = '❌ Connection failed - Invalid API key?';
     };
 
-    aisSocket.onclose = function() {
-        console.log('⚠️ Disconnected from AISStream');
-        statusText.textContent = '⚠️ Disconnected from AIS Stream';
+    aisSocket.onclose = function(event) {
+        clearTimeout(connectionTimeout);
+        console.log('⚠️ WebSocket closed. Code:', event.code, 'Reason:', event.reason);
+        console.log('Was clean close:', event.wasClean);
+        if (statusText.textContent.includes('Connecting') || statusText.textContent.includes('Waiting')) {
+            statusText.textContent = '⚠️ Connection closed - Check API key';
+        }
     };
 }
 
