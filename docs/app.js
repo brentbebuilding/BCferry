@@ -560,8 +560,135 @@ const BC_FERRIES_VESSELS = {
     // Add more MMSI numbers as needed
 };
 
-// Your AISStream API key - GET FREE KEY AT: https://aisstream.io/
-const AISSTREAM_API_KEY = '68340377beb0c1e2693b994286f9e2f8d8763af3';
+// Backend API URL - UPDATE THIS after deploying to Fly.io
+const BACKEND_URL = 'https://bcferry-ais-tracker.fly.dev';  // Change to your Fly.io app URL
+
+// Connect to backend WebSocket
+function connectToBackend() {
+    const setupMessage = document.getElementById('mapSetupMessage');
+    const mapElement = document.getElementById('map');
+    const statusDiv = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('statusText');
+
+    // Hide setup message and show map
+    setupMessage.style.display = 'none';
+    mapElement.style.display = 'block';
+    statusDiv.style.display = 'block';
+    statusText.innerHTML = '⏳ Connecting to ferry tracker...';
+
+    if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
+        console.log('Already connected to backend');
+        statusText.innerHTML = '✅ Connected - Tracking ferries';
+        return;
+    }
+
+    console.log('🔌 Connecting to backend:', BACKEND_URL);
+
+    // Connect to our backend WebSocket
+    const wsUrl = BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws';
+    console.log('WebSocket URL:', wsUrl);
+
+    try {
+        aisSocket = new WebSocket(wsUrl);
+        console.log('✅ WebSocket object created');
+    } catch (err) {
+        console.error('❌ Failed to create WebSocket:', err);
+        statusText.innerHTML = `❌ Connection failed<br><small>${err.message}</small>`;
+        return;
+    }
+
+    aisSocket.onopen = function() {
+        console.log('✅ Connected to backend');
+        statusText.innerHTML = '✅ Connected<br><small>Waiting for ferries...</small>';
+    };
+
+    aisSocket.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('📨 Message from backend:', data);
+
+            if (data.type === 'initial') {
+                // Initial data with all current vessels
+                console.log('📦 Received initial data:', data.vessels.length, 'vessels');
+                data.vessels.forEach(vessel => {
+                    updateVesselPosition(vessel);
+                });
+
+                if (data.vessels.length > 0) {
+                    statusText.innerHTML = `✅ Tracking ${data.vessels.length} ferr${data.vessels.length === 1 ? 'y' : 'ies'}`;
+                } else {
+                    statusText.innerHTML = '✅ Connected<br><small>No ferries broadcasting</small>';
+                }
+            } else if (data.type === 'update') {
+                // Real-time update for a single vessel
+                console.log('🚢 Vessel update:', data.vessel.name);
+                updateVesselPosition(data.vessel);
+
+                // Update status with current count
+                const count = Object.keys(vesselMarkers).length;
+                statusText.innerHTML = `✅ Tracking ${count} ferr${count === 1 ? 'y' : 'ies'}`;
+            }
+        } catch (err) {
+            console.error('❌ Error processing message:', err);
+        }
+    };
+
+    aisSocket.onerror = function(error) {
+        console.error('❌ WebSocket error:', error);
+        statusText.innerHTML = '❌ Connection error';
+    };
+
+    aisSocket.onclose = function(event) {
+        console.log('⚠️ Connection closed. Code:', event.code);
+        statusText.innerHTML = '⚠️ Disconnected<br><small>Reconnecting...</small>';
+
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+            if (mapContainer.style.display !== 'none') {
+                connectToBackend();
+            }
+        }, 5000);
+    };
+}
+
+// Update vessel position on map - adapted for backend data format
+function updateVesselPosition(vessel) {
+    const mmsi = vessel.mmsi;
+    const lat = vessel.latitude;
+    const lon = vessel.longitude;
+    const speed = vessel.speed || 0;
+    const heading = vessel.heading || 0;
+
+    console.log(`📍 ${vessel.name}: [${lat.toFixed(4)}, ${lon.toFixed(4)}] @ ${speed} knots`);
+
+    if (vesselMarkers[mmsi]) {
+        // Update existing marker
+        vesselMarkers[mmsi].setLatLng([lat, lon]);
+        vesselMarkers[mmsi].setPopupContent(`
+            <b>${vessel.name}</b><br>
+            Speed: ${speed.toFixed(1)} knots<br>
+            Heading: ${heading}°
+        `);
+    } else {
+        // Create new marker - ferry icon
+        const ferryIcon = L.divIcon({
+            className: 'ferry-marker',
+            html: '🚢',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        const marker = L.marker([lat, lon], { icon: ferryIcon })
+            .addTo(map)
+            .bindPopup(`
+                <b>${vessel.name}</b><br>
+                Speed: ${speed.toFixed(1)} knots<br>
+                Heading: ${heading}°
+            `);
+
+        vesselMarkers[mmsi] = marker;
+    }
+}
 
 // View toggle functionality
 scheduleViewBtn.addEventListener('click', () => {
@@ -594,8 +721,8 @@ mapViewBtn.addEventListener('click', () => {
         initializeMap();
     }
 
-    // Connect to AISStream
-    connectToAISStream();
+    // Connect to backend
+    connectToBackend();
 });
 
 // Initialize Leaflet map
@@ -613,195 +740,3 @@ function initializeMap() {
     console.log('Map initialized');
 }
 
-// Connect to AISStream WebSocket
-function connectToAISStream() {
-    const setupMessage = document.getElementById('mapSetupMessage');
-    const mapElement = document.getElementById('map');
-
-    if (AISSTREAM_API_KEY === 'YOUR_API_KEY_HERE') {
-        console.log('AISStream API key not configured');
-        setupMessage.style.display = 'block';
-        mapElement.style.display = 'none';
-        return;
-    }
-
-    // Hide setup message and show map
-    setupMessage.style.display = 'none';
-    mapElement.style.display = 'block';
-
-    // Show connection status
-    const statusDiv = document.getElementById('connectionStatus');
-    const statusText = document.getElementById('statusText');
-    statusDiv.style.display = 'block';
-    statusText.textContent = '⏳ Connecting to AIS Stream...';
-
-    if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
-        console.log('Already connected to AISStream');
-        statusText.textContent = '✅ Connected - Tracking BC Ferries';
-        return;
-    }
-
-    console.log('🔌 Attempting WebSocket connection to wss://stream.aisstream.io/v0/stream');
-    console.log('API Key:', AISSTREAM_API_KEY ? AISSTREAM_API_KEY.substring(0, 8) + '...' : 'MISSING');
-
-    // Set timeout for connection
-    const connectionTimeout = setTimeout(() => {
-        console.log('⚠️ Connection timeout after 10 seconds');
-        console.log('WebSocket final state:', aisSocket ? aisSocket.readyState : 'null');
-        console.log('States: CONNECTING=0, OPEN=1, CLOSING=2, CLOSED=3');
-        if (statusText.textContent.includes('Connecting')) {
-            statusText.textContent = '⚠️ Connection timeout - Retrying...';
-            if (aisSocket) {
-                aisSocket.close();
-            }
-        }
-    }, 10000);
-
-    try {
-        aisSocket = new WebSocket('wss://stream.aisstream.io/v0/stream');
-        console.log('✅ WebSocket object created, initial readyState:', aisSocket.readyState, '(0=CONNECTING)');
-    } catch (err) {
-        clearTimeout(connectionTimeout);
-        console.error('❌ Failed to create WebSocket:', err);
-        statusText.textContent = '❌ WebSocket creation failed';
-        return;
-    }
-
-    aisSocket.onopen = function() {
-        clearTimeout(connectionTimeout);
-        console.log('✅ WebSocket OPEN event fired!');
-        statusText.innerHTML = '✅ Connected!<br><small>Sending subscription...</small>';
-
-        // Simplified subscription to test API key validity
-        const subscription = {
-            Apikey: AISSTREAM_API_KEY,
-            BoundingBoxes: [[[-90, -180], [90, 180]]]  // Worldwide - simpler test
-        };
-
-        console.log('📡 Sending subscription:', JSON.stringify(subscription));
-
-        try {
-            aisSocket.send(JSON.stringify(subscription));
-            console.log('✅ Subscription sent successfully');
-            statusText.innerHTML = '✅ Subscription sent<br><small>Waiting for data...</small>';
-        } catch (err) {
-            console.error('❌ Failed to send subscription:', err);
-            statusText.innerHTML = `❌ Send failed<br><small>${err.message}</small>`;
-        }
-    };
-
-    let messageCount = 0;
-    let vesselCount = 0;
-
-    aisSocket.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        messageCount++;
-
-        console.log('📨 Message received (#' + messageCount + '):', data);
-
-        // Check for error messages from AISStream
-        if (data.error || data.Error) {
-            const errorMsg = data.error || data.Error;
-            console.error('❌ AISStream returned error:', errorMsg);
-            statusText.innerHTML = `❌ API Error<br><small>${errorMsg}</small>`;
-            return;
-        }
-
-        // Success! We're receiving data
-        if (messageCount === 1) {
-            console.log('🎉 First message received - API key is valid!');
-            statusText.innerHTML = `✅ API key valid!<br><small>Received ${messageCount} message(s)</small>`;
-        }
-
-        if (data.MessageType === 'PositionReport') {
-            console.log('🎯 Position report for MMSI:', data.MetaData?.MMSI);
-            // For now just count, not plotting since we're testing worldwide
-            statusText.innerHTML = `✅ Receiving data<br><small>${messageCount} messages received</small>`;
-        }
-    };
-
-    aisSocket.onerror = function(error) {
-        clearTimeout(connectionTimeout);
-        console.error('❌ WebSocket ERROR event fired');
-        console.error('Error object:', error);
-        console.error('ReadyState at error:', aisSocket.readyState);
-        console.error('Error type:', error.type);
-        console.error('Error message:', error.message || 'No message');
-
-        // Show error on page
-        const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
-        statusText.innerHTML = `❌ WebSocket Error<br><small>State: ${readyStateNames[aisSocket.readyState]} (${aisSocket.readyState})</small>`;
-    };
-
-    aisSocket.onclose = function(event) {
-        clearTimeout(connectionTimeout);
-        console.log('⚠️ WebSocket CLOSE event fired');
-        console.log('Close code:', event.code);
-        console.log('Close reason:', event.reason || '(no reason provided)');
-        console.log('Was clean close:', event.wasClean);
-        console.log('ReadyState at close:', aisSocket.readyState);
-
-        // Common WebSocket close codes
-        const closeCodes = {
-            1000: 'Normal closure',
-            1001: 'Going away',
-            1002: 'Protocol error',
-            1003: 'Unsupported data',
-            1006: 'Abnormal closure (no close frame)',
-            1008: 'Policy violation',
-            1009: 'Message too big',
-            1011: 'Server error',
-            1015: 'TLS handshake failure'
-        };
-        const closeMsg = closeCodes[event.code] || 'Unknown';
-        console.log('Close code meaning:', closeMsg);
-
-        // Show close details on page
-        if (statusText.textContent.includes('Connecting') || statusText.textContent.includes('Waiting') || statusText.textContent.includes('Error')) {
-            statusText.innerHTML = `⚠️ Connection Closed<br><small>Code ${event.code}: ${closeMsg}</small><br><small>Reason: ${event.reason || 'None given'}</small>`;
-        }
-    };
-}
-
-// Update vessel position on map
-function updateVesselPosition(data) {
-    const mmsi = data.MetaData.MMSI;
-    const vesselName = BC_FERRIES_VESSELS[mmsi] || data.MetaData.ShipName || 'Unknown Vessel';
-    const position = data.Message.PositionReport;
-
-    const lat = position.Latitude;
-    const lon = position.Longitude;
-    const speed = position.Sog; // Speed over ground in knots
-    const heading = position.TrueHeading;
-
-    console.log(`${vesselName}: ${lat}, ${lon}, ${speed} knots`);
-
-    // Create or update marker
-    if (vesselMarkers[mmsi]) {
-        // Update existing marker
-        vesselMarkers[mmsi].setLatLng([lat, lon]);
-        vesselMarkers[mmsi].setPopupContent(`
-            <b>${vesselName}</b><br>
-            Speed: ${speed} knots<br>
-            Heading: ${heading}°
-        `);
-    } else {
-        // Create new marker - ferry icon
-        const ferryIcon = L.divIcon({
-            className: 'ferry-marker',
-            html: '🚢',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        });
-
-        const marker = L.marker([lat, lon], { icon: ferryIcon })
-            .addTo(map)
-            .bindPopup(`
-                <b>${vesselName}</b><br>
-                Speed: ${speed} knots<br>
-                Heading: ${heading}°
-            `);
-
-        vesselMarkers[mmsi] = marker;
-    }
-}
