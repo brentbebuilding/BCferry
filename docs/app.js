@@ -207,52 +207,96 @@ function getCapacityText(percent) {
     return 'Very Limited';
 }
 
+// Helper function to parse time string to minutes since midnight
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
+    if (!match) return null;
+    let hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const isPM = match[3].toLowerCase() === 'pm';
+    if (isPM && hours !== 12) hours += 12;
+    if (!isPM && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+}
+
 // Merge sailings from capacity and noncapacity data
 function mergeSailings(capacitySailings, nonCapacitySailings) {
-    const merged = [];
-    const sailingMap = new Map();
+    const allSailings = [];
 
-    // First, add all capacity sailings (they have fill data and sailingStatus)
+    // Add all capacity sailings first (they have actual fill data)
     if (capacitySailings) {
         capacitySailings.forEach(sailing => {
-            // Normalize time to lowercase for consistent matching (8:40 am vs 8:40 AM)
-            const key = sailing.time ? sailing.time.toLowerCase() : sailing.time;
-            sailingMap.set(key, sailing);
+            allSailings.push({ ...sailing, source: 'capacity' });
         });
     }
 
-    // Then, add noncapacity sailings that aren't already in the map
+    // Add all noncapacity sailings
     if (nonCapacitySailings) {
         nonCapacitySailings.forEach(sailing => {
-            // Normalize time to lowercase for consistent matching
-            const key = sailing.time ? sailing.time.toLowerCase() : sailing.time;
-            if (!sailingMap.has(key)) {
-                // Noncapacity sailings don't have fill or sailingStatus
-                // Add defaults: fill=0, sailingStatus='future' (assume all future)
-                sailingMap.set(key, {
-                    ...sailing,
-                    fill: 0,
-                    sailingStatus: 'future' // Default to future for noncapacity
-                });
-            }
+            allSailings.push({
+                ...sailing,
+                fill: 0,
+                sailingStatus: sailing.sailingStatus || 'future',
+                source: 'noncapacity'
+            });
         });
     }
 
-    // Convert map back to array and sort by time
-    return Array.from(sailingMap.values()).sort((a, b) => {
-        const parseTime = (timeStr) => {
-            if (!timeStr) return 0;
-            const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
-            if (!match) return 0;
-            let hours = parseInt(match[1]);
-            const minutes = parseInt(match[2]);
-            const isPM = match[3].toLowerCase() === 'pm';
-            if (isPM && hours !== 12) hours += 12;
-            if (!isPM && hours === 12) hours = 0;
-            return hours * 60 + minutes;
-        };
-        return parseTime(a.time) - parseTime(b.time);
+    // Sort by time
+    allSailings.sort((a, b) => {
+        return (parseTimeToMinutes(a.time) || 0) - (parseTimeToMinutes(b.time) || 0);
     });
+
+    // Remove duplicates - keep sailings with capacity data over those without
+    const deduplicated = [];
+    const used = new Set();
+
+    for (let i = 0; i < allSailings.length; i++) {
+        if (used.has(i)) continue;
+
+        const sailing = allSailings[i];
+        const sailingTime = parseTimeToMinutes(sailing.time);
+        const sailingVessel = sailing.vesselName ? sailing.vesselName.toLowerCase().trim() : '';
+
+        // Look for duplicates: same vessel within 2 minutes
+        let bestMatch = sailing;
+        let bestMatchIndex = i;
+
+        for (let j = i + 1; j < allSailings.length; j++) {
+            if (used.has(j)) continue;
+
+            const otherSailing = allSailings[j];
+            const otherTime = parseTimeToMinutes(otherSailing.time);
+            const otherVessel = otherSailing.vesselName ? otherSailing.vesselName.toLowerCase().trim() : '';
+
+            // If times differ by more than 2 minutes, stop checking
+            if (Math.abs(sailingTime - otherTime) > 2) break;
+
+            // If same vessel (or both empty) within 2 minutes, it's a duplicate
+            const isSameVessel = sailingVessel && otherVessel && sailingVessel === otherVessel;
+            const bothEmpty = !sailingVessel && !otherVessel;
+
+            if (isSameVessel || bothEmpty) {
+                // Mark as duplicate
+                used.add(j);
+
+                // Prefer the one with capacity data (fill > 0)
+                const bestHasCapacity = bestMatch.fill && parseInt(bestMatch.fill) > 0;
+                const otherHasCapacity = otherSailing.fill && parseInt(otherSailing.fill) > 0;
+
+                if (otherHasCapacity && !bestHasCapacity) {
+                    bestMatch = otherSailing;
+                    bestMatchIndex = j;
+                }
+            }
+        }
+
+        deduplicated.push(bestMatch);
+        used.add(bestMatchIndex);
+    }
+
+    return deduplicated;
 }
 
 // Merge routes from both APIs
