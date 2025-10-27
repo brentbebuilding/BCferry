@@ -461,18 +461,58 @@ function createRouteCard(route) {
         ? filterSailingsByStatus(route.sailings, selectedDay)
         : [];
 
-    // FINAL DEDUPLICATION: Remove duplicate times (case-insensitive), keep the one with capacity
-    const timeMap = new Map();
-    filteredSailings.forEach(sailing => {
-        const normalizedTime = sailing.time ? sailing.time.toLowerCase() : sailing.time;
-        const existing = timeMap.get(normalizedTime);
+    // FINAL DEDUPLICATION: Remove sailings within 2 minutes of each other
+    // (APIs return both scheduled and actual times for same sailing)
+    const deduplicated = [];
+    const used = new Set();
 
-        // If no existing, or this one has better capacity data, use it
-        if (!existing || (parseInt(sailing.fill || 0) > parseInt(existing.fill || 0))) {
-            timeMap.set(normalizedTime, sailing);
-        }
+    // Sort by time first
+    filteredSailings.sort((a, b) => {
+        return (parseTimeToMinutes(a.time) || 0) - (parseTimeToMinutes(b.time) || 0);
     });
-    filteredSailings = Array.from(timeMap.values());
+
+    for (let i = 0; i < filteredSailings.length; i++) {
+        if (used.has(i)) continue;
+
+        let bestMatch = filteredSailings[i];
+        let bestIndex = i;
+        const baseTime = parseTimeToMinutes(filteredSailings[i].time);
+
+        // Look ahead for duplicates within 2 minutes
+        for (let j = i + 1; j < filteredSailings.length; j++) {
+            if (used.has(j)) continue;
+
+            const otherTime = parseTimeToMinutes(filteredSailings[j].time);
+            const timeDiff = Math.abs(baseTime - otherTime);
+
+            // If more than 2 minutes apart, stop looking
+            if (timeDiff > 2) break;
+
+            // Found a duplicate - pick the best one
+            used.add(j);
+
+            const bestHasVessel = bestMatch.vesselName && bestMatch.vesselName.trim();
+            const otherHasVessel = filteredSailings[j].vesselName && filteredSailings[j].vesselName.trim();
+            const bestCapacity = parseInt(bestMatch.fill || 0);
+            const otherCapacity = parseInt(filteredSailings[j].fill || 0);
+
+            // Prefer: vessel name > capacity > doesn't matter
+            if (otherHasVessel && !bestHasVessel) {
+                bestMatch = filteredSailings[j];
+                bestIndex = j;
+            } else if (otherHasVessel && bestHasVessel && otherCapacity > bestCapacity) {
+                bestMatch = filteredSailings[j];
+                bestIndex = j;
+            } else if (!otherHasVessel && !bestHasVessel && otherCapacity > bestCapacity) {
+                bestMatch = filteredSailings[j];
+                bestIndex = j;
+            }
+        }
+
+        deduplicated.push(bestMatch);
+        used.add(bestIndex);
+    }
+    filteredSailings = deduplicated;
 
     const sailingsHTML = filteredSailings.length > 0
         ? filteredSailings.map(sailing => createSailingCard(sailing)).join('')
