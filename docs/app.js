@@ -662,7 +662,7 @@ function connectToAISStream() {
         statusText.textContent = '✅ Connected - Waiting for ferry data...';
 
         const subscription = {
-            APIKey: AISSTREAM_API_KEY,
+            Apikey: AISSTREAM_API_KEY,  // NOTE: Must be "Apikey" not "APIKey"!
             BoundingBoxes: [
                 [[47, -125], [55, -122]]  // BC coastal waters
             ],
