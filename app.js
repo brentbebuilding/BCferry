@@ -368,7 +368,22 @@ function displayRoutes() {
         return;
     }
 
-    routesContainer.innerHTML = filteredRoutes.map(route => createRouteCard(route)).join('');
+    // Filter out routes with no sailings after applying day filter
+    const selectedDay = dayFilter.value;
+    const routesWithSailings = filteredRoutes.filter(route => {
+        const filteredSailings = route.sailings && route.sailings.length > 0
+            ? filterSailingsByStatus(route.sailings, selectedDay)
+            : [];
+        return filteredSailings.length > 0;
+    });
+
+    // If no routes have sailings, show a message
+    if (routesWithSailings.length === 0) {
+        routesContainer.innerHTML = '<div class="no-sailings">No sailings scheduled for the selected time period.</div>';
+        return;
+    }
+
+    routesContainer.innerHTML = routesWithSailings.map(route => createRouteCard(route)).join('');
 }
 
 // Create route card HTML
