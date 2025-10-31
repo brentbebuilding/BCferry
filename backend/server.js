@@ -104,25 +104,35 @@ function determineRoute(lat, lon, heading) {
         const possibleRoutes = ROUTES.filter(r => r.to === closest.code);
 
         if (possibleRoutes.length > 0) {
-            // Find which origin makes most sense based on distance
+            // Find which origin makes most sense - prefer the FARTHEST origin
+            // (vessel came from far away and is now close to destination)
             let bestRoute = possibleRoutes[0];
-            let bestScore = Infinity;
+            let bestScore = -Infinity; // Changed: now we want HIGHEST score (farthest origin)
+
+            console.log(`\n🔍 Determining route for vessel heading to ${closest.terminal.name}`);
+            console.log(`   Vessel position: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+            console.log(`   Distance to ${closest.terminal.name}: ${closest.distance.toFixed(2)} km`);
 
             for (const route of possibleRoutes) {
                 const originTerminal = TERMINALS[route.from];
                 const distanceFromOrigin = calculateDistance(lat, lon, originTerminal.lat, originTerminal.lon);
-                const distanceToDestination = closest.distance;
+                const routeLength = calculateDistance(originTerminal.lat, originTerminal.lon, closest.terminal.lat, closest.terminal.lon);
 
-                // Score based on: closer to destination than origin, and reasonable total route length
-                const score = Math.abs(distanceFromOrigin - distanceToDestination);
+                // Score: prefer routes where vessel is far from origin (came from there)
+                // and the route length makes sense
+                const score = distanceFromOrigin;
 
-                if (score < bestScore) {
+                console.log(`   Route ${route.from} → ${route.to}: dist from ${route.from}=${distanceFromOrigin.toFixed(2)}km, route length=${routeLength.toFixed(2)}km, score=${score.toFixed(2)}`);
+
+                if (score > bestScore) {
                     bestScore = score;
                     bestRoute = route;
                 }
             }
 
             const originTerminal = TERMINALS[bestRoute.from];
+            console.log(`   ✅ Selected: ${bestRoute.from} → ${bestRoute.to}`);
+
             return {
                 from: bestRoute.from,
                 to: closest.code,
