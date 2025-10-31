@@ -439,15 +439,29 @@ function displayRoutes() {
         return;
     }
 
-    // DEBUG: Log each route's sailings count
-    filteredRoutes.forEach(route => {
-        const selectedDay = dayFilter.value;
-        const totalSailings = route.sailings?.length || 0;
-        const filteredSailings = route.sailings ? filterSailingsByStatus(route.sailings, selectedDay).length : 0;
-        console.log(`${route.fromTerminalCode}→${route.toTerminalCode}: ${totalSailings} total, ${filteredSailings} after ${selectedDay} filter`);
+    // Filter out routes with no sailings after applying day filter
+    const selectedDay = dayFilter.value;
+    console.log(`=== FILTERING ROUTES (day filter: ${selectedDay}) ===`);
+
+    const routesWithSailings = filteredRoutes.filter(route => {
+        const filteredSailings = route.sailings && route.sailings.length > 0
+            ? filterSailingsByStatus(route.sailings, selectedDay)
+            : [];
+        const hasData = filteredSailings.length > 0;
+
+        // Debug: Log filtering decisions
+        console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} total sailings, ${filteredSailings.length} after filter → ${hasData ? '✓ SHOW' : '✗ HIDE'}`);
+
+        return hasData;
     });
 
-    routesContainer.innerHTML = filteredRoutes.map(route => createRouteCard(route)).join('');
+    // If no routes have sailings, show a message
+    if (routesWithSailings.length === 0) {
+        routesContainer.innerHTML = '<div class="no-sailings">No sailings scheduled for the selected time period.</div>';
+        return;
+    }
+
+    routesContainer.innerHTML = routesWithSailings.map(route => createRouteCard(route)).join('');
 }
 
 // Create route card HTML
