@@ -385,18 +385,6 @@ async function fetchFerryData() {
             console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} sailings`);
         });
 
-        // VISIBLE DEBUG: Show diagnostic info on page
-        const nanHsbRoute = allRoutes.find(r => r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HSB');
-        const nanHbrRoute = allRoutes.find(r => r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HBR');
-        if (!nanHsbRoute && !nanHbrRoute && nanRoutes.length === 0) {
-            // No NAN routes at all
-            showError('⚠️ DEBUG: No NAN (Nanaimo) routes found in API. Total routes: ' + allRoutes.length);
-        } else if (!nanHsbRoute && !nanHbrRoute) {
-            // NAN routes exist but not to HSB/HBR
-            const nanRoutesList = nanRoutes.map(r => `${r.fromTerminalCode}→${r.toTerminalCode}`).join(', ');
-            showError(`⚠️ DEBUG: NAN routes found but not to HSB/HBR. Found: ${nanRoutesList}`);
-        }
-
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
@@ -486,17 +474,6 @@ function displayRoutes() {
 
         return hasData;
     });
-
-    // DEBUG: Check if NAN → HSB/HBR was filtered out
-    const nanHsbFiltered = filteredRoutes.find(r =>
-        (r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HSB') ||
-        (r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HBR')
-    );
-    if (nanHsbFiltered && !routesWithSailings.find(r => r === nanHsbFiltered)) {
-        const sailingCount = nanHsbFiltered.sailings?.length || 0;
-        const dayFilteredCount = nanHsbFiltered.sailings ? filterSailingsByStatus(nanHsbFiltered.sailings, selectedDay).length : 0;
-        showError(`⚠️ DEBUG: NAN → ${nanHsbFiltered.toTerminalCode} route found but hidden. Has ${sailingCount} total sailings, ${dayFilteredCount} after "${selectedDay}" filter.`);
-    }
 
     // If no routes have sailings, show a message
     if (routesWithSailings.length === 0) {

@@ -28,6 +28,7 @@ const BC_FERRIES_VESSELS = {
     '316002992': 'Queen of Cumberland',
     '316011410': 'Coastal Inspiration',
     '316003044': 'Queen of Nanaimo',
+    '316001262': 'Queen of Surrey',  // NAN-HSB route
 };
 
 // BC Ferry Terminal Locations (lat, lon)
