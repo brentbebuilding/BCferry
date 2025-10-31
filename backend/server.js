@@ -22,7 +22,7 @@ const BC_FERRIES_VESSELS = {
     '316002980': 'Queen of Alberni',
     '316003008': 'Queen of Cowichan',
     '316003020': 'Queen of Oak Bay',
-    '316003032': 'Queen of Coquitlam',
+    '316001249': 'Queen of Coquitlam',  // FIXED: Was 316003032 (fishing boat)
     '316001256': 'Spirit of Vancouver Island',
     '316011406': 'Coastal Renaissance',
     '316002992': 'Queen of Cumberland',
