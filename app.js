@@ -307,6 +307,14 @@ async function fetchFerryData() {
         }
 
         allRoutes = data.routes || [];
+
+        // Debug: Log all routes to help diagnose missing routes
+        console.log('=== ALL ROUTES RECEIVED ===');
+        allRoutes.forEach(route => {
+            const sailingCount = route.sailings?.length || 0;
+            console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${sailingCount} sailings`);
+        });
+
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
@@ -370,11 +378,18 @@ function displayRoutes() {
 
     // Filter out routes with no sailings after applying day filter
     const selectedDay = dayFilter.value;
+    console.log(`=== FILTERING ROUTES (day filter: ${selectedDay}) ===`);
+
     const routesWithSailings = filteredRoutes.filter(route => {
         const filteredSailings = route.sailings && route.sailings.length > 0
             ? filterSailingsByStatus(route.sailings, selectedDay)
             : [];
-        return filteredSailings.length > 0;
+        const hasData = filteredSailings.length > 0;
+
+        // Debug: Log filtering decisions
+        console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} total sailings, ${filteredSailings.length} after filter → ${hasData ? '✓ SHOW' : '✗ HIDE'}`);
+
+        return hasData;
     });
 
     // If no routes have sailings, show a message
