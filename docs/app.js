@@ -487,6 +487,17 @@ function displayRoutes() {
         return hasData;
     });
 
+    // DEBUG: Check if NAN → HSB/HBR was filtered out
+    const nanHsbFiltered = filteredRoutes.find(r =>
+        (r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HSB') ||
+        (r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HBR')
+    );
+    if (nanHsbFiltered && !routesWithSailings.find(r => r === nanHsbFiltered)) {
+        const sailingCount = nanHsbFiltered.sailings?.length || 0;
+        const dayFilteredCount = nanHsbFiltered.sailings ? filterSailingsByStatus(nanHsbFiltered.sailings, selectedDay).length : 0;
+        showError(`⚠️ DEBUG: NAN → ${nanHsbFiltered.toTerminalCode} route found but hidden. Has ${sailingCount} total sailings, ${dayFilteredCount} after "${selectedDay}" filter.`);
+    }
+
     // If no routes have sailings, show a message
     if (routesWithSailings.length === 0) {
         routesContainer.innerHTML = '<div class="no-sailings">No sailings scheduled for the selected time period.</div>';
