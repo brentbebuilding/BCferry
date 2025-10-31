@@ -91,16 +91,53 @@ function determineRoute(lat, lon, heading) {
     // Sort by distance
     closestTerminals.sort((a, b) => a.distance - b.distance);
 
-    // Get two closest terminals
+    // Get closest terminal (most likely destination)
     const closest = closestTerminals[0];
-    const secondClosest = closestTerminals[1];
 
-    // Calculate bearing to each terminal
+    // Calculate bearing to closest terminal
     const bearingToClosest = calculateBearing(lat, lon, closest.terminal.lat, closest.terminal.lon);
-    const bearingToSecond = calculateBearing(lat, lon, secondClosest.terminal.lat, secondClosest.terminal.lon);
-
-    // Calculate heading difference (how much the ferry's heading differs from bearing to terminal)
     const diffToClosest = Math.abs(((heading - bearingToClosest + 180) % 360) - 180);
+
+    // If heading toward closest terminal (within 45 degrees), find the origin
+    if (diffToClosest < 45) {
+        // Check known routes to this destination
+        const possibleRoutes = ROUTES.filter(r => r.to === closest.code);
+
+        if (possibleRoutes.length > 0) {
+            // Find which origin makes most sense based on distance
+            let bestRoute = possibleRoutes[0];
+            let bestScore = Infinity;
+
+            for (const route of possibleRoutes) {
+                const originTerminal = TERMINALS[route.from];
+                const distanceFromOrigin = calculateDistance(lat, lon, originTerminal.lat, originTerminal.lon);
+                const distanceToDestination = closest.distance;
+
+                // Score based on: closer to destination than origin, and reasonable total route length
+                const score = Math.abs(distanceFromOrigin - distanceToDestination);
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestRoute = route;
+                }
+            }
+
+            const originTerminal = TERMINALS[bestRoute.from];
+            return {
+                from: bestRoute.from,
+                to: closest.code,
+                fromName: originTerminal.name,
+                toName: closest.terminal.name,
+                destination: closest.terminal,
+                distanceToDestination: closest.distance,
+                route: `${originTerminal.name} → ${closest.terminal.name}`
+            };
+        }
+    }
+
+    // Fallback to second closest terminal
+    const secondClosest = closestTerminals[1];
+    const bearingToSecond = calculateBearing(lat, lon, secondClosest.terminal.lat, secondClosest.terminal.lon);
     const diffToSecond = Math.abs(((heading - bearingToSecond + 180) % 360) - 180);
 
     // If heading toward second closest (within 45 degrees), that's the destination
@@ -116,28 +153,15 @@ function determineRoute(lat, lon, heading) {
         };
     }
 
-    // If heading toward closest terminal
-    if (diffToClosest < 45) {
-        return {
-            from: secondClosest.code,
-            to: closest.code,
-            fromName: secondClosest.terminal.name,
-            toName: closest.terminal.name,
-            destination: closest.terminal,
-            distanceToDestination: closest.distance,
-            route: `${secondClosest.terminal.name} → ${closest.terminal.name}`
-        };
-    }
-
     // If can't determine, return closest two terminals
     return {
-        from: closest.code,
-        to: secondClosest.code,
-        fromName: closest.terminal.name,
-        toName: secondClosest.terminal.name,
-        destination: secondClosest.terminal,
-        distanceToDestination: secondClosest.distance,
-        route: `Between ${closest.terminal.name} and ${secondClosest.terminal.name}`
+        from: secondClosest.code,
+        to: closest.code,
+        fromName: secondClosest.terminal.name,
+        toName: closest.terminal.name,
+        destination: closest.terminal,
+        distanceToDestination: closest.distance,
+        route: `${secondClosest.terminal.name} → ${closest.terminal.name}`
     };
 }
 
