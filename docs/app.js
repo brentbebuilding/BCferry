@@ -674,6 +674,18 @@ const loadingIndicator2 = document.getElementById('loadingIndicator');
 // Map instance
 let map = null;
 let vesselMarkers = {};
+let destinationMarker = null; // Track the destination marker
+
+// Terminal coordinates for destination markers
+const TERMINAL_COORDS = {
+    'Tsawwassen': { lat: 49.0074, lon: -123.1299 },
+    'Swartz Bay': { lat: 48.6884, lon: -123.4113 },
+    'Duke Point': { lat: 49.1631, lon: -123.8792 },
+    'Departure Bay': { lat: 49.1947, lon: -123.9543 },
+    'Horseshoe Bay': { lat: 49.3736, lon: -123.2719 },
+    'Langdale': { lat: 49.4611, lon: -123.4803 },
+    'Bowen Island': { lat: 49.3833, lon: -123.3333 }
+};
 
 // AISStream WebSocket
 let aisSocket = null;
@@ -801,6 +813,36 @@ function connectToBackend() {
     };
 }
 
+// Show destination marker
+function showDestinationMarker(destinationName) {
+    // Remove old destination marker if exists
+    if (destinationMarker) {
+        map.removeLayer(destinationMarker);
+        destinationMarker = null;
+    }
+
+    // Find terminal coordinates
+    const terminalCoords = TERMINAL_COORDS[destinationName];
+    if (!terminalCoords) {
+        console.log(`⚠️ No coordinates for destination: ${destinationName}`);
+        return;
+    }
+
+    // Create green destination marker
+    const greenIcon = L.divIcon({
+        className: 'destination-marker',
+        html: '<div style="background-color: #00ff00; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,255,0,0.8);"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+
+    destinationMarker = L.marker([terminalCoords.lat, terminalCoords.lon], { icon: greenIcon })
+        .addTo(map)
+        .bindPopup(`<strong>Destination:</strong> ${destinationName}`);
+
+    console.log(`✅ Destination marker added at ${destinationName}`);
+}
+
 // Update vessel position on map - adapted for backend data format
 function updateVesselPosition(vessel) {
     const mmsi = vessel.mmsi;
@@ -810,6 +852,7 @@ function updateVesselPosition(vessel) {
     const heading = vessel.heading || 0;
     const route = vessel.route || 'Unknown route';
     const eta = vessel.eta || 'Unknown';
+    const destinationName = vessel.to || 'Unknown'; // Get destination name
 
     console.log(`📍 ${vessel.name}: ${route} - ETA: ${eta}`);
 
@@ -841,6 +884,8 @@ function updateVesselPosition(vessel) {
         // Update existing marker
         vesselMarkers[mmsi].setLatLng([lat, lon]);
         vesselMarkers[mmsi].setPopupContent(popupContent);
+        // Update destination stored with marker
+        vesselMarkers[mmsi].destinationName = destinationName;
     } else {
         // Create new marker - ferry icon
         const ferryIcon = L.divIcon({
@@ -853,6 +898,14 @@ function updateVesselPosition(vessel) {
         const marker = L.marker([lat, lon], { icon: ferryIcon })
             .addTo(map)
             .bindPopup(popupContent);
+
+        // Store destination with marker
+        marker.destinationName = destinationName;
+
+        // Add click event to show destination
+        marker.on('click', function() {
+            showDestinationMarker(this.destinationName);
+        });
 
         vesselMarkers[mmsi] = marker;
     }
@@ -872,6 +925,12 @@ scheduleViewBtn.addEventListener('click', () => {
     if (aisSocket) {
         aisSocket.close();
         aisSocket = null;
+    }
+
+    // Remove destination marker
+    if (destinationMarker) {
+        map.removeLayer(destinationMarker);
+        destinationMarker = null;
     }
 });
 
