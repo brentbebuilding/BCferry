@@ -746,23 +746,37 @@ function connectToBackend() {
             if (data.type === 'initial') {
                 // Initial data with all current vessels
                 console.log('📦 Received initial data:', data.vessels.length, 'vessels');
+
+                // DEBUG: Log all vessels received
+                console.log('=== ALL VESSELS RECEIVED FROM BACKEND ===');
                 data.vessels.forEach(vessel => {
+                    console.log(`${vessel.name} (${vessel.mmsi}): ${vessel.route || 'Unknown route'}`);
                     updateVesselPosition(vessel);
                 });
 
+                // DEBUG: Check for Queen of Coquitlam specifically
+                const coquitlam = data.vessels.find(v => v.name && v.name.includes('Coquitlam'));
+                if (coquitlam) {
+                    console.log('✅ FOUND Queen of Coquitlam:', coquitlam);
+                } else {
+                    console.log('❌ Queen of Coquitlam NOT in vessel data');
+                }
+
                 if (data.vessels.length > 0) {
-                    statusText.innerHTML = `✅ Tracking ${data.vessels.length} ferr${data.vessels.length === 1 ? 'y' : 'ies'}`;
+                    const vesselList = data.vessels.map(v => v.name).join(', ');
+                    statusText.innerHTML = `✅ Tracking ${data.vessels.length} ferr${data.vessels.length === 1 ? 'y' : 'ies'}<br><small>${vesselList}</small>`;
                 } else {
                     statusText.innerHTML = '✅ Connected<br><small>No ferries broadcasting</small>';
                 }
             } else if (data.type === 'update') {
                 // Real-time update for a single vessel
-                console.log('🚢 Vessel update:', data.vessel.name);
+                console.log('🚢 Vessel update:', data.vessel.name, '-', data.vessel.route);
                 updateVesselPosition(data.vessel);
 
-                // Update status with current count
+                // Update status with current count and list
                 const count = Object.keys(vesselMarkers).length;
-                statusText.innerHTML = `✅ Tracking ${count} ferr${count === 1 ? 'y' : 'ies'}`;
+                const vesselNames = Object.values(vesselMarkers).map(m => m.getPopup().getContent().match(/<div[^>]*>([^<]+)<\/div>/)?.[1] || 'Unknown').join(', ');
+                statusText.innerHTML = `✅ Tracking ${count} ferr${count === 1 ? 'y' : 'ies'}<br><small>${vesselNames}</small>`;
             }
         } catch (err) {
             console.error('❌ Error processing message:', err);
