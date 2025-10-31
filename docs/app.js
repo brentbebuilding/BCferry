@@ -365,6 +365,38 @@ async function fetchFerryData() {
 
         console.log('Merged routes:', allRoutes.length);
 
+        // DEBUG: Check for NAN routes
+        console.log('=== ALL NAN (NANAIMO) ROUTES ===');
+        const nanRoutes = allRoutes.filter(r => r.fromTerminalCode === 'NAN' || r.toTerminalCode === 'NAN');
+        nanRoutes.forEach(route => {
+            console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} sailings`);
+        });
+        if (nanRoutes.length === 0) {
+            console.log('❌ NO NAN ROUTES FOUND IN API DATA!');
+        }
+
+        // DEBUG: Check for HSB/HBR routes
+        console.log('=== ALL HORSESHOE BAY ROUTES (HSB or HBR) ===');
+        const hsbRoutes = allRoutes.filter(r =>
+            r.fromTerminalCode === 'HSB' || r.toTerminalCode === 'HSB' ||
+            r.fromTerminalCode === 'HBR' || r.toTerminalCode === 'HBR'
+        );
+        hsbRoutes.forEach(route => {
+            console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} sailings`);
+        });
+
+        // VISIBLE DEBUG: Show diagnostic info on page
+        const nanHsbRoute = allRoutes.find(r => r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HSB');
+        const nanHbrRoute = allRoutes.find(r => r.fromTerminalCode === 'NAN' && r.toTerminalCode === 'HBR');
+        if (!nanHsbRoute && !nanHbrRoute && nanRoutes.length === 0) {
+            // No NAN routes at all
+            showError('⚠️ DEBUG: No NAN (Nanaimo) routes found in API. Total routes: ' + allRoutes.length);
+        } else if (!nanHsbRoute && !nanHbrRoute) {
+            // NAN routes exist but not to HSB/HBR
+            const nanRoutesList = nanRoutes.map(r => `${r.fromTerminalCode}→${r.toTerminalCode}`).join(', ');
+            showError(`⚠️ DEBUG: NAN routes found but not to HSB/HBR. Found: ${nanRoutesList}`);
+        }
+
         updateRouteFilter();
         filterAndDisplayRoutes();
         updateLastUpdated();
