@@ -282,34 +282,38 @@ function mergeRoutes(capacityRoutes, nonCapacityRoutes) {
     return Array.from(routeMap.values());
 }
 
-// Fetch ferry data - CAPACITY ONLY (no merge)
+// Fetch ferry data - MERGE both capacity and noncapacity endpoints
 async function fetchFerryData() {
     try {
         showLoading();
         hideError();
 
-        // Just use capacity endpoint - no merge!
-        console.log('Fetching from CAPACITY endpoint ONLY...');
-        const response = await fetch(BC_FERRIES_API_CAPACITY);
+        console.log('Fetching from BOTH capacity and noncapacity endpoints...');
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // Fetch both endpoints in parallel
+        const [capacityResponse, noncapacityResponse] = await Promise.all([
+            fetch(BC_FERRIES_API_CAPACITY),
+            fetch(BC_FERRIES_API_NONCAPACITY)
+        ]);
+
+        if (!capacityResponse.ok) {
+            throw new Error(`Capacity API error! status: ${capacityResponse.status}`);
+        }
+        if (!noncapacityResponse.ok) {
+            throw new Error(`Noncapacity API error! status: ${noncapacityResponse.status}`);
         }
 
-        const data = await response.json();
-        console.log('Capacity data routes:', data.routes?.length);
+        const capacityData = await capacityResponse.json();
+        const noncapacityData = await noncapacityResponse.json();
 
-        if (data.routes && data.routes.length > 0) {
-            console.log('First route:', data.routes[0]);
-            if (data.routes[0].sailings && data.routes[0].sailings.length > 0) {
-                console.log('First sailing:', data.routes[0].sailings[0]);
-            }
-        }
+        console.log('Capacity routes:', capacityData.routes?.length);
+        console.log('Noncapacity routes:', noncapacityData.routes?.length);
 
-        allRoutes = data.routes || [];
+        // Merge routes from both endpoints
+        allRoutes = mergeRoutes(capacityData.routes, noncapacityData.routes);
 
         // Debug: Log all routes to help diagnose missing routes
-        console.log('=== ALL ROUTES RECEIVED ===');
+        console.log('=== ALL ROUTES RECEIVED (after merge) ===');
         allRoutes.forEach(route => {
             const sailingCount = route.sailings?.length || 0;
             console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${sailingCount} sailings`);
