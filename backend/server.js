@@ -231,49 +231,45 @@ async function fetchBCFerriesSchedule() {
         // Merge both datasets
         const allSailings = [];
 
-        // Process capacity data
-        if (capacityData) {
-            for (const [routeKey, routeData] of Object.entries(capacityData)) {
-                // Each route has fromTerminalCode, toTerminalCode, and sailings array
-                if (routeData && routeData.sailings && Array.isArray(routeData.sailings)) {
-                    routeData.sailings.forEach(sailing => {
+        // Process capacity data - API returns { routes: [...] }
+        if (capacityData && capacityData.routes && Array.isArray(capacityData.routes)) {
+            capacityData.routes.forEach(route => {
+                if (route.sailings && Array.isArray(route.sailings)) {
+                    route.sailings.forEach(sailing => {
                         allSailings.push({
                             ...sailing,
-                            fromTerminalCode: routeData.fromTerminalCode,
-                            toTerminalCode: routeData.toTerminalCode,
-                            routeCode: routeKey
+                            fromTerminalCode: route.fromTerminalCode,
+                            toTerminalCode: route.toTerminalCode
                         });
                     });
                 }
-            }
+            });
         }
 
-        // Process non-capacity data
-        if (nonCapacityData) {
-            for (const [routeKey, routeData] of Object.entries(nonCapacityData)) {
-                if (routeData && routeData.sailings && Array.isArray(routeData.sailings)) {
-                    routeData.sailings.forEach(sailing => {
+        // Process non-capacity data - API returns { routes: [...] }
+        if (nonCapacityData && nonCapacityData.routes && Array.isArray(nonCapacityData.routes)) {
+            nonCapacityData.routes.forEach(route => {
+                if (route.sailings && Array.isArray(route.sailings)) {
+                    route.sailings.forEach(sailing => {
                         // Only add if not already in capacity data
-                        // Normalize time to lowercase for case-insensitive comparison
                         const sailingTime = sailing.time ? sailing.time.toLowerCase() : sailing.time;
                         const exists = allSailings.some(s =>
                             s.time && s.time.toLowerCase() === sailingTime &&
-                            s.fromTerminalCode === routeData.fromTerminalCode &&
-                            s.toTerminalCode === routeData.toTerminalCode
+                            s.fromTerminalCode === route.fromTerminalCode &&
+                            s.toTerminalCode === route.toTerminalCode
                         );
                         if (!exists) {
                             allSailings.push({
                                 ...sailing,
-                                fromTerminalCode: routeData.fromTerminalCode,
-                                toTerminalCode: routeData.toTerminalCode,
-                                routeCode: routeKey,
+                                fromTerminalCode: route.fromTerminalCode,
+                                toTerminalCode: route.toTerminalCode,
                                 sailingStatus: sailing.sailingStatus || 'future',
                                 fill: sailing.fill || 0
                             });
                         }
                     });
                 }
-            }
+            });
         }
 
         currentSchedule = allSailings;
