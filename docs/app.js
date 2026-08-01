@@ -62,9 +62,11 @@ function annotateSailingDays(sailings) {
     });
 }
 
-// Filter sailings by the selected day
+// Filter sailings by the selected day. Departed sailings are dropped everywhere -
+// this is a live tracker, not a log of what already left.
 function filterSailingsByStatus(sailings, dayFilter) {
-    const timed = annotateSailingDays(sailings.filter(s => s.time));
+    const timed = annotateSailingDays(sailings.filter(s => s.time))
+        .filter(s => s.sailingStatus !== 'past');
     if (dayFilter === 'all') return timed;
     return timed.filter(s => s.day === dayFilter);
 }
@@ -213,6 +215,16 @@ async function fetchFerryData() {
     }
 }
 
+// The main sailings - everything else (Gulf Islands, Bellingham, etc.) is noise
+// for most users and is excluded from both the dropdown and the "All Routes" view.
+const MAJOR_ROUTES = [
+    'TSA-SWB', 'SWB-TSA', // Tsawwassen ↔ Swartz Bay
+    'TSA-DUK', 'DUK-TSA', // Tsawwassen ↔ Duke Point
+    'HSB-NAN', 'NAN-HSB', // Horseshoe Bay ↔ Nanaimo
+    'HSB-LNG', 'LNG-HSB', // Horseshoe Bay ↔ Langdale
+    'HSB-BOW', 'BOW-HSB'  // Horseshoe Bay ↔ Bowen Island
+];
+
 // Update route filter dropdown
 function updateRouteFilter() {
     const currentValue = routeFilter.value;
@@ -220,20 +232,11 @@ function updateRouteFilter() {
     // Clear existing options
     routeFilter.innerHTML = '<option value="all">All Routes</option>';
 
-    // Major routes only - clean and simple
-    const majorRoutes = [
-        'TSA-SWB', 'SWB-TSA', // Tsawwassen ↔ Swartz Bay
-        'TSA-DUK', 'DUK-TSA', // Tsawwassen ↔ Duke Point
-        'HSB-NAN', 'NAN-HSB', // Horseshoe Bay ↔ Nanaimo
-        'HSB-LNG', 'LNG-HSB', // Horseshoe Bay ↔ Langdale
-        'HSB-BOW', 'BOW-HSB'  // Horseshoe Bay ↔ Bowen Island
-    ];
-
     // Add route options - clean labels
     allRoutes.forEach(route => {
         const routeCode = `${route.fromTerminalCode}-${route.toTerminalCode}`;
 
-        if (majorRoutes.includes(routeCode)) {
+        if (MAJOR_ROUTES.includes(routeCode)) {
             const fromName = getTerminalName(route.fromTerminalCode);
             const toName = getTerminalName(route.toTerminalCode);
             const option = document.createElement('option');
@@ -257,7 +260,9 @@ function filterAndDisplayRoutes() {
     const selectedRoute = routeFilter.value;
 
     if (selectedRoute === 'all') {
-        filteredRoutes = allRoutes;
+        filteredRoutes = allRoutes.filter(route =>
+            MAJOR_ROUTES.includes(`${route.fromTerminalCode}-${route.toTerminalCode}`)
+        );
     } else {
         const [from, to] = selectedRoute.split('-');
         filteredRoutes = allRoutes.filter(route =>
