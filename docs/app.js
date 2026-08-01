@@ -464,22 +464,6 @@ const routesContainer2 = document.getElementById('routesContainer');
 const mapContainer = document.getElementById('mapContainer');
 const loadingIndicator2 = document.getElementById('loadingIndicator');
 
-// Map instance
-let map = null;
-let vesselMarkers = {};
-let destinationMarker = null; // Track the destination marker
-
-// Terminal coordinates for destination markers
-const TERMINAL_COORDS = {
-    'Tsawwassen': { lat: 49.0074, lon: -123.1299 },
-    'Swartz Bay': { lat: 48.6884, lon: -123.4113 },
-    'Duke Point': { lat: 49.1631, lon: -123.8792 },
-    'Departure Bay': { lat: 49.1947, lon: -123.9543 },
-    'Horseshoe Bay': { lat: 49.3736, lon: -123.2719 },
-    'Langdale': { lat: 49.4611, lon: -123.4803 },
-    'Bowen Island': { lat: 49.3833, lon: -123.3333 }
-};
-
 // AISStream WebSocket
 let aisSocket = null;
 
@@ -492,13 +476,23 @@ function setTrackingStatus(html) {
     if (statusText) statusText.innerHTML = html;
 }
 
-// Describe how many ferries are currently on the map
+// mmsi -> vessel name, just for the status line. Map3D owns the actual 3D
+// objects; app.js only feeds it data.
+const trackedVessels = {};
+
 function describeTrackedVessels() {
-    const names = Object.values(vesselMarkers).map(m => m.vesselName).filter(Boolean);
+    const names = Object.values(trackedVessels);
     if (names.length === 0) {
         return '✅ Connected<br><small>No ferries are broadcasting right now</small>';
     }
     return `✅ Tracking ${names.length} ferr${names.length === 1 ? 'y' : 'ies'}<br><small>${names.join(', ')}</small>`;
+}
+
+// Feed a vessel position into the 3D map
+function updateVesselPosition(vessel) {
+    if (!vessel || !window.Map3D) return;
+    trackedVessels[vessel.mmsi] = vessel.name;
+    window.Map3D.updateVessel(vessel);
 }
 
 // Load current positions over HTTP. This also wakes the backend, which sleeps when
@@ -523,14 +517,7 @@ let connecting = false;
 
 // Connect to backend WebSocket
 async function connectToBackend() {
-    const setupMessage = document.getElementById('mapSetupMessage');
-    const mapElement = document.getElementById('map');
-    const statusDiv = document.getElementById('connectionStatus');
-
-    // Hide setup message and show map
-    setupMessage.style.display = 'none';
-    mapElement.style.display = 'block';
-    statusDiv.style.display = 'block';
+    document.getElementById('connectionStatus').style.display = 'block';
 
     if (connecting) return;
 
@@ -595,96 +582,6 @@ function scheduleReconnect() {
     }, 5000);
 }
 
-// Show a green dot at the terminal a vessel is heading for
-function showDestinationMarker(destinationName) {
-    if (destinationMarker) {
-        map.removeLayer(destinationMarker);
-        destinationMarker = null;
-    }
-
-    const terminalCoords = TERMINAL_COORDS[destinationName];
-    if (!terminalCoords) return;
-
-    const greenIcon = L.divIcon({
-        className: 'destination-marker',
-        html: '<div style="background-color: #00ff00; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,255,0,0.8);"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-    });
-
-    destinationMarker = L.marker([terminalCoords.lat, terminalCoords.lon], { icon: greenIcon })
-        .addTo(map)
-        .bindPopup(`<strong>Destination:</strong> ${destinationName}`);
-}
-
-// Update vessel position on map - adapted for backend data format
-function updateVesselPosition(vessel) {
-    const mmsi = vessel.mmsi;
-    const lat = vessel.latitude;
-    const lon = vessel.longitude;
-
-    if (!map || typeof lat !== 'number' || typeof lon !== 'number') return;
-
-    const speed = vessel.speed || 0;
-    const heading = vessel.heading || 0;
-    const route = vessel.route || 'Unknown route';
-    const eta = vessel.eta || 'Unknown';
-    const destinationName = vessel.to || 'Unknown';
-
-    // Create popup content with route and ETA
-    const popupContent = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 200px;">
-            <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; color: #2d9b91;">
-                ${vessel.name}
-            </div>
-            <div style="border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
-                <div style="margin-bottom: 6px;">
-                    <span style="color: #888;">Route:</span><br>
-                    <strong>${route}</strong>
-                </div>
-                <div style="margin-bottom: 6px;">
-                    <span style="color: #888;">ETA:</span> <strong>${eta}</strong>
-                </div>
-                <div style="margin-bottom: 4px;">
-                    <span style="color: #888;">Speed:</span> ${speed.toFixed(1)} knots
-                </div>
-                <div style="margin-bottom: 4px;">
-                    <span style="color: #888;">Heading:</span> ${heading}°
-                </div>
-            </div>
-        </div>
-    `;
-
-    if (vesselMarkers[mmsi]) {
-        const marker = vesselMarkers[mmsi];
-        marker.setLatLng([lat, lon]);
-        marker.setPopupContent(popupContent);
-        marker.vesselName = vessel.name;
-        marker.destinationName = destinationName;
-        return;
-    }
-
-    const ferryIcon = L.divIcon({
-        className: 'ferry-marker',
-        html: '🚢',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-    });
-
-    const marker = L.marker([lat, lon], { icon: ferryIcon })
-        .addTo(map)
-        .bindPopup(popupContent);
-
-    marker.vesselName = vessel.name;
-    marker.destinationName = destinationName;
-
-    marker.on('click', function() {
-        showDestinationMarker(this.destinationName);
-    });
-
-    vesselMarkers[mmsi] = marker;
-}
-
 // View toggle functionality
 scheduleViewBtn.addEventListener('click', () => {
     scheduleViewBtn.classList.add('active');
@@ -695,17 +592,12 @@ scheduleViewBtn.addEventListener('click', () => {
     loadingIndicator2.style.display = routesContainer2.children.length === 0 ? 'block' : 'none';
     mapContainer.style.display = 'none';
 
-    // Disconnect WebSocket when leaving map view
+    // Disconnect WebSocket and pause the 3D scene when leaving map view
     if (aisSocket) {
         aisSocket.close();
         aisSocket = null;
     }
-
-    // Remove destination marker
-    if (destinationMarker) {
-        map.removeLayer(destinationMarker);
-        destinationMarker = null;
-    }
+    if (window.Map3D) window.Map3D.setActive(false);
 });
 
 mapViewBtn.addEventListener('click', () => {
@@ -717,25 +609,13 @@ mapViewBtn.addEventListener('click', () => {
     loadingIndicator2.style.display = 'none';
     mapContainer.style.display = 'block';
 
-    // Initialize map if not already done
-    if (!map) {
-        initializeMap();
+    if (window.Map3D) {
+        window.Map3D.init(document.getElementById('map'));
+        window.Map3D.setActive(true);
+    } else {
+        setTrackingStatus("❌ 3D map failed to load<br><small>Check your connection and reload the page</small>");
     }
 
-    // Connect to backend
     connectToBackend();
 });
-
-// Initialize Leaflet map
-function initializeMap() {
-    // Center on BC coastal waters
-    map = L.map('map').setView([49.2827, -123.1207], 9);
-
-    // Add dark mode tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
-    }).addTo(map);
-}
 

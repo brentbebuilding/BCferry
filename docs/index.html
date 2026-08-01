@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="version" content="v6.2-clock-based-departed">
+    <meta name="version" content="v7.0-3d-live-map">
     <title>BC Ferry Tracker</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -59,31 +58,28 @@
 
         <!-- Live Map View (hidden by default) -->
         <div id="mapContainer" class="map-container" style="display: none;">
-            <div id="mapSetupMessage" class="map-setup">
-                <h3>🗺️ Live Ferry Tracking</h3>
-                <p>To enable live ferry tracking, you need a free API key from AISStream.io:</p>
-                <ol>
-                    <li>Visit <a href="https://aisstream.io/" target="_blank">aisstream.io</a></li>
-                    <li>Sign up for a free account</li>
-                    <li>Get your API key from the dashboard</li>
-                    <li>Open <code>app.js</code> and replace <code>YOUR_API_KEY_HERE</code> with your key</li>
-                </ol>
-                <p class="note">Once configured, you'll see real-time positions of all BC Ferries vessels on the map!</p>
-            </div>
             <div id="connectionStatus" style="padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 12px; color: var(--text-secondary); font-size: 0.9rem; display: none;">
-                <span id="statusText">⏳ Connecting to AIS Stream...</span>
+                <span id="statusText">⏳ Connecting to ferry tracker...</span>
             </div>
-            <div id="map" style="height: 600px; border-radius: 12px;"></div>
+            <div id="map" class="map3d-canvas"></div>
         </div>
     </div>
 
     <footer>
         <p>Data provided by <a href="https://www.bcferriesapi.ca" target="_blank">BC Ferries API</a> and <a href="https://aisstream.io" target="_blank">AISStream</a></p>
         <p>Not affiliated with BC Ferries. For official information, visit <a href="https://www.bcferries.com" target="_blank">bcferries.com</a></p>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">v6.2 - Clock-Based Departed Filter</p>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">v7.0 - 3D Live Map</p>
     </footer>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="app.js?v=6.2"></script>
+    <script src="app.js?v=7.0"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="map3d.js?v=7.0"></script>
 </body>
 </html>
