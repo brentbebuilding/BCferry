@@ -5,11 +5,8 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Enable CORS for GitHub Pages
-app.use(cors({
-    origin: ['https://brentbebuilding.github.io', 'http://localhost:3000'],
-    credentials: true
-}));
+// Public read-only vessel positions, no auth or cookies, so any origin may read them
+app.use(cors());
 
 app.use(express.json());
 
@@ -300,96 +297,107 @@ async function fetchBCFerriesSchedule() {
     }
 }
 
-// Find current sailing for a vessel by name
+// Strip date prefixes like "(Oct 24, 2025)" and delay notes from a vessel name
+function normalizeVesselName(name) {
+    if (!name) return '';
+    return name.replace(/\([^)]*\)/g, '').replace(/delayed.*$/i, '').trim().toLowerCase();
+}
+
+// Parse a schedule time like "6:15 am" into minutes since midnight
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const isPM = match[3].toLowerCase() === 'pm';
+
+    if (isPM && hours !== 12) hours += 12;
+    if (!isPM && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+}
+
+// Current wall-clock time in BC, in minutes since midnight (the host runs on UTC)
+function pacificTimeInMinutes() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Vancouver',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(new Date());
+
+    const hour = parseInt(parts.find(p => p.type === 'hour').value);
+    const minute = parseInt(parts.find(p => p.type === 'minute').value);
+    return (hour % 24) * 60 + minute;
+}
+
+// Sailings that departed within the last few hours are still plausibly in progress
+const RECENT_DEPARTURE_WINDOW_MINUTES = 240;
+
+function buildRouteInfo(sailing) {
+    const fromName = getTerminalName(sailing.fromTerminalCode);
+    const toName = getTerminalName(sailing.toTerminalCode);
+
+    return {
+        from: sailing.fromTerminalCode,
+        to: sailing.toTerminalCode,
+        fromName,
+        toName,
+        route: `${fromName} → ${toName}`,
+        scheduledDeparture: sailing.time,
+        destination: TERMINALS[sailing.toTerminalCode]
+    };
+}
+
+// Find the sailing a vessel is currently operating, by matching its AIS name
+// against the BC Ferries schedule.
 function findCurrentSailing(vesselName) {
-    if (!vesselName || currentSchedule.length === 0) {
+    const target = normalizeVesselName(vesselName);
+    if (!target || currentSchedule.length === 0) return null;
+
+    const matches = currentSchedule.filter(sailing => {
+        const name = normalizeVesselName(sailing.vesselName);
+        return name && (name === target || name.includes(target));
+    });
+
+    const shouldDebug = !vesselDebugLogged.has(target);
+    if (shouldDebug) vesselDebugLogged.add(target);
+
+    if (matches.length === 0) {
+        if (shouldDebug) console.log(`❌ "${vesselName}" not found in schedule`);
         return null;
     }
 
-    // Clean vessel name for matching
-    const cleanName = vesselName.trim().toLowerCase();
-
-    // Only log debug once per vessel (unless schedule refreshes)
-    const shouldDebug = !vesselDebugLogged.has(cleanName);
-    if (shouldDebug) {
-        console.log(`🔍 Looking for vessel: "${cleanName}"`);
+    const current = matches.find(s => s.sailingStatus === 'current');
+    if (current) {
+        if (shouldDebug) console.log(`✅ ${vesselName}: ${current.fromTerminalCode} → ${current.toTerminalCode} [current]`);
+        return buildRouteInfo(current);
     }
 
-    // Find sailings with matching vessel name that are "current" (actively sailing)
-    const currentSailing = currentSchedule.find(sailing => {
-        if (!sailing.vesselName) return false;
+    // No sailing is flagged current, so fall back to the most recent departure.
+    // Scan by scheduled time rather than array order: the schedule is grouped by
+    // route, so the first 'past' entry is the earliest of the day, not the latest.
+    const nowMinutes = pacificTimeInMinutes();
+    let mostRecent = null;
+    let mostRecentMinutes = -1;
 
-        // Clean the schedule vessel name - it might have prefixes like "Delayed approx. 20m"
-        let sailingVesselName = sailing.vesselName.trim().toLowerCase();
+    for (const sailing of matches) {
+        if (sailing.sailingStatus !== 'past') continue;
 
-        // Remove common prefixes
-        sailingVesselName = sailingVesselName
-            .replace(/^delayed.*?(?=queen|coastal|spirit|salish)/i, '')
-            .trim();
+        const minutes = parseTimeToMinutes(sailing.time);
+        if (minutes === null || minutes > nowMinutes) continue;
+        if (nowMinutes - minutes > RECENT_DEPARTURE_WINDOW_MINUTES) continue;
 
-        // Check exact match or if AIS name is contained in schedule name
-        return (sailingVesselName === cleanName || sailingVesselName.includes(cleanName))
-            && sailing.sailingStatus === 'current';
-    });
-
-    if (currentSailing) {
-        if (shouldDebug) {
-            console.log(`✅ Found in schedule: ${currentSailing.fromTerminalCode} → ${currentSailing.toTerminalCode} [current]`);
-            vesselDebugLogged.add(cleanName);
+        if (minutes > mostRecentMinutes) {
+            mostRecentMinutes = minutes;
+            mostRecent = sailing;
         }
-        return {
-            from: currentSailing.fromTerminalCode,
-            to: currentSailing.toTerminalCode,
-            fromName: getTerminalName(currentSailing.fromTerminalCode),
-            toName: getTerminalName(currentSailing.toTerminalCode),
-            route: `${getTerminalName(currentSailing.fromTerminalCode)} → ${getTerminalName(currentSailing.toTerminalCode)}`,
-            scheduledDeparture: currentSailing.time,
-            destination: TERMINALS[currentSailing.toTerminalCode]
-        };
     }
 
-    // Debug: show all sailings for this vessel (any status) - only once
-    if (shouldDebug) {
-        const allForVessel = currentSchedule.filter(sailing => {
-            if (!sailing.vesselName) return false;
-            const sailingVesselName = sailing.vesselName.trim().toLowerCase();
-            return sailingVesselName === cleanName;
-        });
-
-        if (allForVessel.length > 0) {
-            console.log(`⚠️ Found vessel in schedule but not "current": ${allForVessel.length} sailings`);
-            allForVessel.slice(0, 3).forEach(s => {
-                console.log(`   - ${s.fromTerminalCode} → ${s.toTerminalCode} at ${s.time} [${s.sailingStatus}]`);
-            });
-        } else {
-            console.log(`❌ Vessel "${cleanName}" not found in schedule at all`);
-            // Show some example vessel names from schedule
-            const exampleNames = currentSchedule
-                .filter(s => s.vesselName)
-                .slice(0, 5)
-                .map(s => s.vesselName);
-            console.log(`   Example names in schedule: ${exampleNames.join(', ')}`);
-        }
-        vesselDebugLogged.add(cleanName);
-    }
-
-    // If no current sailing, check for recent departures (might be in between status updates)
-    const recentDeparture = currentSchedule.find(sailing => {
-        if (!sailing.vesselName) return false;
-        const sailingVesselName = sailing.vesselName.trim().toLowerCase();
-        return sailingVesselName === cleanName && sailing.sailingStatus === 'past';
-    });
-
-    if (recentDeparture) {
-        return {
-            from: recentDeparture.fromTerminalCode,
-            to: recentDeparture.toTerminalCode,
-            fromName: getTerminalName(recentDeparture.fromTerminalCode),
-            toName: getTerminalName(recentDeparture.toTerminalCode),
-            route: `${getTerminalName(recentDeparture.fromTerminalCode)} → ${getTerminalName(recentDeparture.toTerminalCode)}`,
-            scheduledDeparture: recentDeparture.time,
-            destination: TERMINALS[recentDeparture.toTerminalCode]
-        };
+    if (mostRecent) {
+        if (shouldDebug) console.log(`✅ ${vesselName}: ${mostRecent.fromTerminalCode} → ${mostRecent.toTerminalCode} [recent departure]`);
+        return buildRouteInfo(mostRecent);
     }
 
     return null;
@@ -435,13 +443,21 @@ function connectToAISStream() {
                 const position = message.Message?.PositionReport;
 
                 if (position && position.Latitude && position.Longitude) {
-                    // Try to find current sailing from BC Ferries schedule
+                    // Prefer the scheduled route; only guess from position as a fallback
                     let routeInfo = findCurrentSailing(vesselName);
-                    let eta = 'Unknown';
                     let routeSource = 'schedule';
 
-                    if (routeInfo && routeInfo.destination) {
-                        // Got route from schedule - calculate distance to destination
+                    if (!routeInfo) {
+                        routeInfo = determineRoute(
+                            position.Latitude,
+                            position.Longitude,
+                            position.TrueHeading || position.Cog || 0
+                        );
+                        routeSource = 'estimated';
+                    }
+
+                    let eta = 'Unknown';
+                    if (routeInfo.destination) {
                         const distanceToDestination = calculateDistance(
                             position.Latitude,
                             position.Longitude,
@@ -449,15 +465,6 @@ function connectToAISStream() {
                             routeInfo.destination.lon
                         );
                         eta = calculateETA(distanceToDestination, position.Sog || 0);
-                    } else {
-                        // Fallback: guess route based on position and heading
-                        routeInfo = determineRoute(
-                            position.Latitude,
-                            position.Longitude,
-                            position.TrueHeading || position.Cog || 0
-                        );
-                        eta = calculateETA(routeInfo.distanceToDestination, position.Sog || 0);
-                        routeSource = 'estimated';
                     }
 
                     vesselPositions[mmsi] = {

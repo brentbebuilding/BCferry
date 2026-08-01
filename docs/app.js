@@ -12,12 +12,9 @@ const routeFilter = document.getElementById('routeFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 
 // BC Ferries API endpoints - calling directly from browser (v2)
-// Using correct endpoints WITHOUT www subdomain
-const BC_FERRIES_API_ROOT = 'https://bcferriesapi.ca/v2/';
+// capacity has fill %, noncapacity has the full route list. We merge both.
 const BC_FERRIES_API_CAPACITY = 'https://bcferriesapi.ca/v2/capacity/';
 const BC_FERRIES_API_NONCAPACITY = 'https://bcferriesapi.ca/v2/noncapacity/';
-
-// Using BOTH endpoints: capacity (has fill %) + noncapacity (has all routes)
 
 // Terminal name mapping
 const terminalNames = {
@@ -43,150 +40,33 @@ function getTerminalName(code) {
     return terminalNames[code] || code;
 }
 
-// Format time
-function formatTime(timeString) {
-    if (!timeString) return 'N/A';
-    const time = new Date(timeString);
-    return time.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
+// Tag each sailing as 'today' or 'tomorrow'.
+// The API returns sailings in chronological order, so the schedule rolls over to
+// tomorrow at the point where the clock time stops increasing.
+function annotateSailingDays(sailings) {
+    let day = 'today';
+    let previousMinutes = null;
+
+    return sailings.map(sailing => {
+        const minutes = parseTimeToMinutes(sailing.time);
+        const hasDatePrefix = sailing.vesselName && sailing.vesselName.trim().startsWith('(');
+
+        if (hasDatePrefix) {
+            day = 'tomorrow';
+        } else if (previousMinutes !== null && minutes !== null && minutes < previousMinutes) {
+            day = 'tomorrow';
+        }
+
+        if (minutes !== null) previousMinutes = minutes;
+        return { ...sailing, day };
     });
 }
 
-// Get status label for sailing - SHOW ALL DATA
-function getStatusLabel(sailing) {
-    const parts = [];
-
-    // Show sailing status
-    if (sailing.sailingStatus) {
-        parts.push(`Status: ${sailing.sailingStatus}`);
-    }
-
-    // Show if vessel name has a date
-    if (sailing.vesselName && sailing.vesselName.includes('202')) {
-        const match = sailing.vesselName.match(/\(([^)]+)\)/);
-        if (match) {
-            parts.push(`DATE: ${match[1]}`);
-        }
-    }
-
-    // Show any date field
-    if (sailing.date) {
-        parts.push(`date field: ${sailing.date}`);
-    }
-
-    // Show departure date if exists
-    if (sailing.departureDate) {
-        parts.push(`departureDate: ${sailing.departureDate}`);
-    }
-
-    return parts.join(' | ');
-}
-
-// Check if a sailing is today, tomorrow, or another day
-function getSailingDay(timeString) {
-    if (!timeString) return null;
-
-    const sailingDate = new Date(timeString);
-    const now = new Date();
-
-    // Reset time parts to compare dates only
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const sailingDay = new Date(sailingDate.getFullYear(), sailingDate.getMonth(), sailingDate.getDate());
-
-    if (sailingDay.getTime() === today.getTime()) {
-        return 'today';
-    } else if (sailingDay.getTime() === tomorrow.getTime()) {
-        return 'tomorrow';
-    } else {
-        return 'other';
-    }
-}
-
-// Check if a future sailing is tomorrow based on time comparison
-function isTomorrowSailing(sailing, allSailings) {
-    // If vesselName starts with a date like "(Oct 24, 2025)", it's definitely tomorrow
-    if (sailing.vesselName && sailing.vesselName.trim().startsWith('(')) {
-        console.log(`    ✅ Has date prefix in vesselName`);
-        return true;
-    }
-
-    // If it's not a future sailing, it can't be tomorrow
-    if (sailing.sailingStatus !== 'future') {
-        console.log(`    ❌ Not future status (${sailing.sailingStatus})`);
-        return false;
-    }
-
-    // Find the last current or most recent past sailing
-    const lastSailing = [...allSailings]
-        .reverse()
-        .find(s => s.sailingStatus === 'current' || s.sailingStatus === 'past');
-
-    if (!lastSailing || !lastSailing.time) {
-        // No current/past sailing found - this means all sailings are future
-        // If it's late at night, ALL future sailings are tomorrow
-        console.log(`    ⚠️ No current/past sailing found - assuming all future are tomorrow`);
-        return true; // CHANGED FROM FALSE TO TRUE
-    }
-
-    console.log(`    Comparing against last sailing: ${lastSailing.time} (${lastSailing.sailingStatus})`);
-
-    // Convert times to comparable format (24-hour)
-    const parseTime = (timeStr) => {
-        if (!timeStr) return null;
-        const match = timeStr.match(/(\d+):(\d+)\s*(am|pm)/i);
-        if (!match) return null;
-        let hours = parseInt(match[1]);
-        const minutes = parseInt(match[2]);
-        const isPM = match[3].toLowerCase() === 'pm';
-
-        if (isPM && hours !== 12) hours += 12;
-        if (!isPM && hours === 12) hours = 0;
-
-        return hours * 60 + minutes; // Minutes since midnight
-    };
-
-    const currentTimeMinutes = parseTime(lastSailing.time);
-    const sailingTimeMinutes = parseTime(sailing.time);
-
-    console.log(`    Current time minutes: ${currentTimeMinutes}, Sailing time minutes: ${sailingTimeMinutes}`);
-
-    if (currentTimeMinutes === null || sailingTimeMinutes === null) {
-        console.log(`    ❌ Could not parse times`);
-        return false;
-    }
-
-    // If the future sailing time is less than current time, it must be tomorrow
-    // Example: current is 7:26 PM (1166 mins), sailing is 6:15 AM (375 mins)
-    const isTomorrow = sailingTimeMinutes < currentTimeMinutes;
-    console.log(`    ${sailingTimeMinutes} < ${currentTimeMinutes} = ${isTomorrow}`);
-    return isTomorrow;
-}
-
-// Filter sailings by status (for day filter)
+// Filter sailings by the selected day
 function filterSailingsByStatus(sailings, dayFilter) {
-    if (dayFilter === 'all') {
-        return sailings.filter(s => s.time);
-    }
-
-    if (dayFilter === 'today') {
-        // Today's sailings: past, current, or future that are NOT tomorrow
-        return sailings.filter(s => {
-            if (!s.time) return false;
-            if (s.sailingStatus === 'past' || s.sailingStatus === 'current') return true;
-            return !isTomorrowSailing(s, sailings);
-        });
-    } else if (dayFilter === 'tomorrow') {
-        // Tomorrow's sailings
-        return sailings.filter(s => {
-            if (!s.time) return false;
-            return isTomorrowSailing(s, sailings);
-        });
-    }
-
-    return sailings.filter(s => s.time);
+    const timed = annotateSailingDays(sailings.filter(s => s.time));
+    if (dayFilter === 'all') return timed;
+    return timed.filter(s => s.day === dayFilter);
 }
 
 // Get capacity level
@@ -220,87 +100,50 @@ function parseTimeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-// Merge sailings from capacity and noncapacity data
+// Strip date prefixes like "(Oct 24, 2025) " and delay notes from a vessel name
+function normalizeVesselName(name) {
+    if (!name) return '';
+    return name.replace(/\([^)]*\)/g, '').replace(/delayed.*$/i, '').trim().toLowerCase();
+}
+
+// Merge sailings from the capacity and noncapacity feeds.
+// The noncapacity feed is the complete schedule, so it defines the ordering; capacity
+// data is layered onto it. Never re-sort by clock time: the list spans past midnight
+// into tomorrow, so ordering by time-of-day would interleave the two days.
 function mergeSailings(capacitySailings, nonCapacitySailings) {
-    const allSailings = [];
+    const base = (nonCapacitySailings || []).map(s => ({ ...s, fill: s.fill || 0 }));
+    const capacity = capacitySailings || [];
 
-    // Add all capacity sailings first (they have actual fill data)
-    if (capacitySailings) {
-        capacitySailings.forEach(sailing => {
-            allSailings.push({ ...sailing, source: 'capacity' });
+    if (base.length === 0) return capacity.map(s => ({ ...s }));
+    if (capacity.length === 0) return base;
+
+    const claimed = new Set();
+    const unmatched = [];
+
+    capacity.forEach(cap => {
+        const capTime = parseTimeToMinutes(cap.time);
+        const capVessel = normalizeVesselName(cap.vesselName);
+
+        const matchIndex = base.findIndex((sailing, index) => {
+            if (claimed.has(index)) return false;
+            const time = parseTimeToMinutes(sailing.time);
+            if (capTime === null || time === null) return false;
+            if (Math.abs(time - capTime) > 2) return false;
+
+            const vessel = normalizeVesselName(sailing.vesselName);
+            return !capVessel || !vessel || capVessel === vessel;
         });
-    }
 
-    // Add all noncapacity sailings
-    if (nonCapacitySailings) {
-        nonCapacitySailings.forEach(sailing => {
-            allSailings.push({
-                ...sailing,
-                fill: 0,
-                sailingStatus: sailing.sailingStatus || 'future',
-                source: 'noncapacity'
-            });
-        });
-    }
-
-    // Sort by time
-    allSailings.sort((a, b) => {
-        return (parseTimeToMinutes(a.time) || 0) - (parseTimeToMinutes(b.time) || 0);
-    });
-
-    // Remove duplicates - keep sailings with capacity data over those without
-    const deduplicated = [];
-    const used = new Set();
-
-    for (let i = 0; i < allSailings.length; i++) {
-        if (used.has(i)) continue;
-
-        const sailing = allSailings[i];
-        const sailingTime = parseTimeToMinutes(sailing.time);
-        const sailingVessel = sailing.vesselName ? sailing.vesselName.toLowerCase().trim() : '';
-
-        // Look for duplicates: same vessel within 2 minutes
-        let bestMatch = sailing;
-        let bestMatchIndex = i;
-
-        for (let j = i + 1; j < allSailings.length; j++) {
-            if (used.has(j)) continue;
-
-            const otherSailing = allSailings[j];
-            const otherTime = parseTimeToMinutes(otherSailing.time);
-            const otherVessel = otherSailing.vesselName ? otherSailing.vesselName.toLowerCase().trim() : '';
-
-            // If times differ by more than 2 minutes, stop checking
-            if (Math.abs(sailingTime - otherTime) > 2) break;
-
-            // Determine if this is a duplicate:
-            // - If exact same time (0 min diff), always treat as duplicate
-            // - If 1-2 min diff, only if same vessel or both have no vessel
-            const timeDiff = Math.abs(sailingTime - otherTime);
-            const exactSameTime = timeDiff === 0;
-            const isSameVessel = sailingVessel && otherVessel && sailingVessel === otherVessel;
-            const bothEmpty = !sailingVessel && !otherVessel;
-
-            if (exactSameTime || isSameVessel || bothEmpty) {
-                // Mark as duplicate
-                used.add(j);
-
-                // Prefer the one with capacity data (fill > 0)
-                const bestHasCapacity = bestMatch.fill && parseInt(bestMatch.fill) > 0;
-                const otherHasCapacity = otherSailing.fill && parseInt(otherSailing.fill) > 0;
-
-                if (otherHasCapacity && !bestHasCapacity) {
-                    bestMatch = otherSailing;
-                    bestMatchIndex = j;
-                }
-            }
+        if (matchIndex === -1) {
+            unmatched.push({ ...cap });
+            return;
         }
 
-        deduplicated.push(bestMatch);
-        used.add(bestMatchIndex);
-    }
+        claimed.add(matchIndex);
+        base[matchIndex] = { ...base[matchIndex], ...cap, fill: cap.fill || base[matchIndex].fill };
+    });
 
-    return deduplicated;
+    return base.concat(unmatched);
 }
 
 // Merge routes from both APIs
@@ -342,8 +185,6 @@ async function fetchFerryData() {
         showLoading();
         hideError();
 
-        console.log('Fetching from BOTH capacity and noncapacity endpoints...');
-
         // Fetch both endpoints in parallel
         const [capacityResponse, noncapacityResponse] = await Promise.all([
             fetch(BC_FERRIES_API_CAPACITY),
@@ -357,33 +198,8 @@ async function fetchFerryData() {
         const capacityData = await capacityResponse.json();
         const noncapacityData = await noncapacityResponse.json();
 
-        console.log('Capacity routes:', capacityData.routes?.length || 0);
-        console.log('Non-capacity routes:', noncapacityData.routes?.length || 0);
-
         // Merge the two datasets - capacity data takes priority, noncapacity fills in gaps
         allRoutes = mergeRoutes(capacityData.routes, noncapacityData.routes);
-
-        console.log('Merged routes:', allRoutes.length);
-
-        // DEBUG: Check for NAN routes
-        console.log('=== ALL NAN (NANAIMO) ROUTES ===');
-        const nanRoutes = allRoutes.filter(r => r.fromTerminalCode === 'NAN' || r.toTerminalCode === 'NAN');
-        nanRoutes.forEach(route => {
-            console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} sailings`);
-        });
-        if (nanRoutes.length === 0) {
-            console.log('❌ NO NAN ROUTES FOUND IN API DATA!');
-        }
-
-        // DEBUG: Check for HSB/HBR routes
-        console.log('=== ALL HORSESHOE BAY ROUTES (HSB or HBR) ===');
-        const hsbRoutes = allRoutes.filter(r =>
-            r.fromTerminalCode === 'HSB' || r.toTerminalCode === 'HSB' ||
-            r.fromTerminalCode === 'HBR' || r.toTerminalCode === 'HBR'
-        );
-        hsbRoutes.forEach(route => {
-            console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} sailings`);
-        });
 
         updateRouteFilter();
         filterAndDisplayRoutes();
@@ -461,18 +277,12 @@ function displayRoutes() {
 
     // Filter out routes with no sailings after applying day filter
     const selectedDay = dayFilter.value;
-    console.log(`=== FILTERING ROUTES (day filter: ${selectedDay}) ===`);
 
     const routesWithSailings = filteredRoutes.filter(route => {
         const filteredSailings = route.sailings && route.sailings.length > 0
             ? filterSailingsByStatus(route.sailings, selectedDay)
             : [];
-        const hasData = filteredSailings.length > 0;
-
-        // Debug: Log filtering decisions
-        console.log(`${route.fromTerminalCode} → ${route.toTerminalCode}: ${route.sailings?.length || 0} total sailings, ${filteredSailings.length} after filter → ${hasData ? '✓ SHOW' : '✗ HIDE'}`);
-
-        return hasData;
+        return filteredSailings.length > 0;
     });
 
     // If no routes have sailings, show a message
@@ -491,62 +301,9 @@ function createRouteCard(route) {
 
     // Filter sailings by selected day filter
     const selectedDay = dayFilter.value;
-    let filteredSailings = route.sailings && route.sailings.length > 0
+    const filteredSailings = route.sailings && route.sailings.length > 0
         ? filterSailingsByStatus(route.sailings, selectedDay)
         : [];
-
-    // FINAL DEDUPLICATION: Remove sailings within 2 minutes of each other
-    // (APIs return both scheduled and actual times for same sailing)
-    const deduplicated = [];
-    const used = new Set();
-
-    // Sort by time first
-    filteredSailings.sort((a, b) => {
-        return (parseTimeToMinutes(a.time) || 0) - (parseTimeToMinutes(b.time) || 0);
-    });
-
-    for (let i = 0; i < filteredSailings.length; i++) {
-        if (used.has(i)) continue;
-
-        let bestMatch = filteredSailings[i];
-        let bestIndex = i;
-        const baseTime = parseTimeToMinutes(filteredSailings[i].time);
-
-        // Look ahead for duplicates within 2 minutes
-        for (let j = i + 1; j < filteredSailings.length; j++) {
-            if (used.has(j)) continue;
-
-            const otherTime = parseTimeToMinutes(filteredSailings[j].time);
-            const timeDiff = Math.abs(baseTime - otherTime);
-
-            // If more than 2 minutes apart, stop looking
-            if (timeDiff > 2) break;
-
-            // Found a duplicate - pick the best one
-            used.add(j);
-
-            const bestHasVessel = bestMatch.vesselName && bestMatch.vesselName.trim();
-            const otherHasVessel = filteredSailings[j].vesselName && filteredSailings[j].vesselName.trim();
-            const bestCapacity = parseInt(bestMatch.fill || 0);
-            const otherCapacity = parseInt(filteredSailings[j].fill || 0);
-
-            // Prefer: vessel name > capacity > doesn't matter
-            if (otherHasVessel && !bestHasVessel) {
-                bestMatch = filteredSailings[j];
-                bestIndex = j;
-            } else if (otherHasVessel && bestHasVessel && otherCapacity > bestCapacity) {
-                bestMatch = filteredSailings[j];
-                bestIndex = j;
-            } else if (!otherHasVessel && !bestHasVessel && otherCapacity > bestCapacity) {
-                bestMatch = filteredSailings[j];
-                bestIndex = j;
-            }
-        }
-
-        deduplicated.push(bestMatch);
-        used.add(bestIndex);
-    }
-    filteredSailings = deduplicated;
 
     const sailingsHTML = filteredSailings.length > 0
         ? filteredSailings.map(sailing => createSailingCard(sailing)).join('')
@@ -690,145 +447,128 @@ const TERMINAL_COORDS = {
 // AISStream WebSocket
 let aisSocket = null;
 
-// BC Ferries MMSI numbers (Maritime Mobile Service Identity)
-const BC_FERRIES_VESSELS = {
-    '316001268': 'Spirit of British Columbia',
-    '316011408': 'Coastal Inspiration',
-    '316011409': 'Coastal Celebration',
-    '316011407': 'Coastal Renaissance',
-    '316002980': 'Queen of Alberni',
-    '316003008': 'Queen of Cowichan',
-    '316003020': 'Queen of Oak Bay',
-    '316003032': 'Queen of Coquitlam',
-    '316001256': 'Spirit of Vancouver Island',
-    '316011406': 'Coastal Renaissance',
-    '316002992': 'Queen of Cumberland',
-    '316011410': 'Coastal Inspiration',
-    '316003044': 'Queen of Nanaimo',
-    // Add more MMSI numbers as needed
-};
-
 // Backend API URL - Connected to Render
 const BACKEND_URL = 'https://bcferry.onrender.com';
 
+// Update the on-screen tracking status (the user is usually on mobile, no console)
+function setTrackingStatus(html) {
+    const statusText = document.getElementById('statusText');
+    if (statusText) statusText.innerHTML = html;
+}
+
+// Describe how many ferries are currently on the map
+function describeTrackedVessels() {
+    const names = Object.values(vesselMarkers).map(m => m.vesselName).filter(Boolean);
+    if (names.length === 0) {
+        return '✅ Connected<br><small>No ferries are broadcasting right now</small>';
+    }
+    return `✅ Tracking ${names.length} ferr${names.length === 1 ? 'y' : 'ies'}<br><small>${names.join(', ')}</small>`;
+}
+
+// Load current positions over HTTP. This also wakes the backend, which sleeps when
+// idle on Render's free tier and can take up to a minute to boot.
+async function loadVesselsOverHttp() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/vessels`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        (data.vessels || []).forEach(updateVesselPosition);
+        setTrackingStatus(describeTrackedVessels());
+        return true;
+    } catch (err) {
+        setTrackingStatus(`❌ Can't reach the ferry tracker<br><small>${err.message}</small>`);
+        return false;
+    }
+}
+
+// Guards against stacking connections while a cold start is still in flight
+let connecting = false;
+
 // Connect to backend WebSocket
-function connectToBackend() {
+async function connectToBackend() {
     const setupMessage = document.getElementById('mapSetupMessage');
     const mapElement = document.getElementById('map');
     const statusDiv = document.getElementById('connectionStatus');
-    const statusText = document.getElementById('statusText');
 
     // Hide setup message and show map
     setupMessage.style.display = 'none';
     mapElement.style.display = 'block';
     statusDiv.style.display = 'block';
-    statusText.innerHTML = '⏳ Connecting to ferry tracker...';
+
+    if (connecting) return;
 
     if (aisSocket && aisSocket.readyState === WebSocket.OPEN) {
-        console.log('Already connected to backend');
-        statusText.innerHTML = '✅ Connected - Tracking ferries';
+        setTrackingStatus(describeTrackedVessels());
         return;
     }
 
-    console.log('🔌 Connecting to backend:', BACKEND_URL);
+    connecting = true;
+    setTrackingStatus('⏳ Waking the ferry tracker...<br><small>This can take up to a minute</small>');
 
-    // Connect to our backend WebSocket
-    const wsUrl = BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws';
-    console.log('WebSocket URL:', wsUrl);
+    // Warm the backend and paint whatever it already knows before opening the socket.
+    // Still try the socket if this fails - it may succeed where the fetch didn't.
+    await loadVesselsOverHttp();
+    connecting = false;
+
+    // The user may have switched back to the schedule while the backend was waking
+    if (mapContainer.style.display === 'none') return;
+
+    const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + '/ws';
 
     try {
         aisSocket = new WebSocket(wsUrl);
-        console.log('✅ WebSocket object created');
     } catch (err) {
-        console.error('❌ Failed to create WebSocket:', err);
-        statusText.innerHTML = `❌ Connection failed<br><small>${err.message}</small>`;
+        setTrackingStatus(`❌ Connection failed<br><small>${err.message}</small>`);
+        scheduleReconnect();
         return;
     }
-
-    aisSocket.onopen = function() {
-        console.log('✅ Connected to backend');
-        statusText.innerHTML = '✅ Connected<br><small>Waiting for ferries...</small>';
-    };
 
     aisSocket.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
-            console.log('📨 Message from backend:', data);
 
             if (data.type === 'initial') {
-                // Initial data with all current vessels
-                console.log('📦 Received initial data:', data.vessels.length, 'vessels');
-
-                // DEBUG: Log all vessels received
-                console.log('=== ALL VESSELS RECEIVED FROM BACKEND ===');
-                data.vessels.forEach(vessel => {
-                    console.log(`${vessel.name} (${vessel.mmsi}): ${vessel.route || 'Unknown route'}`);
-                    updateVesselPosition(vessel);
-                });
-
-                // DEBUG: Check for Queen of Coquitlam specifically
-                const coquitlam = data.vessels.find(v => v.name && v.name.includes('Coquitlam'));
-                if (coquitlam) {
-                    console.log('✅ FOUND Queen of Coquitlam:', coquitlam);
-                } else {
-                    console.log('❌ Queen of Coquitlam NOT in vessel data');
-                }
-
-                if (data.vessels.length > 0) {
-                    const vesselList = data.vessels.map(v => v.name).join(', ');
-                    statusText.innerHTML = `✅ Tracking ${data.vessels.length} ferr${data.vessels.length === 1 ? 'y' : 'ies'}<br><small>${vesselList}</small>`;
-                } else {
-                    statusText.innerHTML = '✅ Connected<br><small>No ferries broadcasting</small>';
-                }
+                (data.vessels || []).forEach(updateVesselPosition);
             } else if (data.type === 'update') {
-                // Real-time update for a single vessel
-                console.log('🚢 Vessel update:', data.vessel.name, '-', data.vessel.route);
                 updateVesselPosition(data.vessel);
-
-                // Update status with current count and list
-                const count = Object.keys(vesselMarkers).length;
-                const vesselNames = Object.values(vesselMarkers).map(m => m.getPopup().getContent().match(/<div[^>]*>([^<]+)<\/div>/)?.[1] || 'Unknown').join(', ');
-                statusText.innerHTML = `✅ Tracking ${count} ferr${count === 1 ? 'y' : 'ies'}<br><small>${vesselNames}</small>`;
             }
+
+            setTrackingStatus(describeTrackedVessels());
         } catch (err) {
-            console.error('❌ Error processing message:', err);
+            console.error('Error processing message from backend:', err);
         }
     };
 
-    aisSocket.onerror = function(error) {
-        console.error('❌ WebSocket error:', error);
-        statusText.innerHTML = '❌ Connection error';
+    aisSocket.onerror = function() {
+        setTrackingStatus('❌ Connection error<br><small>Retrying...</small>');
     };
 
-    aisSocket.onclose = function(event) {
-        console.log('⚠️ Connection closed. Code:', event.code);
-        statusText.innerHTML = '⚠️ Disconnected<br><small>Reconnecting...</small>';
-
-        // Attempt to reconnect after 5 seconds
-        setTimeout(() => {
-            if (mapContainer.style.display !== 'none') {
-                connectToBackend();
-            }
-        }, 5000);
+    aisSocket.onclose = function() {
+        aisSocket = null;
+        setTrackingStatus('⚠️ Disconnected<br><small>Reconnecting...</small>');
+        scheduleReconnect();
     };
 }
 
-// Show destination marker
+function scheduleReconnect() {
+    setTimeout(() => {
+        if (mapContainer.style.display !== 'none') {
+            connectToBackend();
+        }
+    }, 5000);
+}
+
+// Show a green dot at the terminal a vessel is heading for
 function showDestinationMarker(destinationName) {
-    // Remove old destination marker if exists
     if (destinationMarker) {
         map.removeLayer(destinationMarker);
         destinationMarker = null;
     }
 
-    // Find terminal coordinates
     const terminalCoords = TERMINAL_COORDS[destinationName];
-    if (!terminalCoords) {
-        console.log(`⚠️ No coordinates for destination: ${destinationName}`);
-        return;
-    }
+    if (!terminalCoords) return;
 
-    // Create green destination marker
     const greenIcon = L.divIcon({
         className: 'destination-marker',
         html: '<div style="background-color: #00ff00; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,255,0,0.8);"></div>',
@@ -839,8 +579,6 @@ function showDestinationMarker(destinationName) {
     destinationMarker = L.marker([terminalCoords.lat, terminalCoords.lon], { icon: greenIcon })
         .addTo(map)
         .bindPopup(`<strong>Destination:</strong> ${destinationName}`);
-
-    console.log(`✅ Destination marker added at ${destinationName}`);
 }
 
 // Update vessel position on map - adapted for backend data format
@@ -848,13 +586,14 @@ function updateVesselPosition(vessel) {
     const mmsi = vessel.mmsi;
     const lat = vessel.latitude;
     const lon = vessel.longitude;
+
+    if (!map || typeof lat !== 'number' || typeof lon !== 'number') return;
+
     const speed = vessel.speed || 0;
     const heading = vessel.heading || 0;
     const route = vessel.route || 'Unknown route';
     const eta = vessel.eta || 'Unknown';
-    const destinationName = vessel.to || 'Unknown'; // Get destination name
-
-    console.log(`📍 ${vessel.name}: ${route} - ETA: ${eta}`);
+    const destinationName = vessel.to || 'Unknown';
 
     // Create popup content with route and ETA
     const popupContent = `
@@ -881,34 +620,33 @@ function updateVesselPosition(vessel) {
     `;
 
     if (vesselMarkers[mmsi]) {
-        // Update existing marker
-        vesselMarkers[mmsi].setLatLng([lat, lon]);
-        vesselMarkers[mmsi].setPopupContent(popupContent);
-        // Update destination stored with marker
-        vesselMarkers[mmsi].destinationName = destinationName;
-    } else {
-        // Create new marker - ferry icon
-        const ferryIcon = L.divIcon({
-            className: 'ferry-marker',
-            html: '🚢',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        });
-
-        const marker = L.marker([lat, lon], { icon: ferryIcon })
-            .addTo(map)
-            .bindPopup(popupContent);
-
-        // Store destination with marker
+        const marker = vesselMarkers[mmsi];
+        marker.setLatLng([lat, lon]);
+        marker.setPopupContent(popupContent);
+        marker.vesselName = vessel.name;
         marker.destinationName = destinationName;
-
-        // Add click event to show destination
-        marker.on('click', function() {
-            showDestinationMarker(this.destinationName);
-        });
-
-        vesselMarkers[mmsi] = marker;
+        return;
     }
+
+    const ferryIcon = L.divIcon({
+        className: 'ferry-marker',
+        html: '🚢',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+    });
+
+    const marker = L.marker([lat, lon], { icon: ferryIcon })
+        .addTo(map)
+        .bindPopup(popupContent);
+
+    marker.vesselName = vessel.name;
+    marker.destinationName = destinationName;
+
+    marker.on('click', function() {
+        showDestinationMarker(this.destinationName);
+    });
+
+    vesselMarkers[mmsi] = marker;
 }
 
 // View toggle functionality
@@ -963,7 +701,5 @@ function initializeMap() {
         subdomains: 'abcd',
         maxZoom: 20
     }).addTo(map);
-
-    console.log('Map initialized');
 }
 
