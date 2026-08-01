@@ -139,25 +139,42 @@ function createOcean() {
         },
         vertexShader: `
             varying vec2 vUv;
+            varying float vViewDepth;
             uniform float uTime;
             void main() {
                 vUv = uv;
                 vec3 pos = position;
                 pos.z += sin(pos.x * 0.12 + uTime * 0.6) * 0.5
                        + sin(pos.y * 0.18 + uTime * 0.9) * 0.35;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                vec4 viewPos = modelViewMatrix * vec4(pos, 1.0);
+                vViewDepth = -viewPos.z;
+                gl_Position = projectionMatrix * viewPos;
             }
         `,
         fragmentShader: `
             varying vec2 vUv;
+            varying float vViewDepth;
             uniform vec3 uColorDeep;
             uniform vec3 uColorGrid;
             uniform float uGridDivisions;
             void main() {
-                vec2 g = fract(vUv * uGridDivisions);
-                vec2 distToLine = min(g, 1.0 - g);
-                float lineMask = 1.0 - smoothstep(0.0, 0.035, min(distToLine.x, distToLine.y));
-                vec3 color = mix(uColorDeep, uColorGrid, lineMask * 0.5);
+                vec2 coord = vUv * uGridDivisions;
+
+                // Width the grid lines in screen space. A fixed width in UV
+                // space collapses below one pixel as the camera pulls back, so
+                // every pixel lands on a line and the water smears into one
+                // flat bright sheet instead of reading as a grid.
+                vec2 toLine = abs(fract(coord - 0.5) - 0.5);
+                vec2 pixelWidth = max(fwidth(coord), vec2(1e-5));
+                vec2 lineAA = toLine / pixelWidth;
+                float lineMask = 1.0 - min(min(lineAA.x, lineAA.y), 1.0);
+
+                // Ease the grid off in the far distance. The screen-space width
+                // above is what stops the smear, so this only has to keep the
+                // horizon from turning busy - it stays visible when zoomed out.
+                float fade = 1.0 - 0.65 * smoothstep(260.0, 760.0, vViewDepth);
+
+                vec3 color = mix(uColorDeep, uColorGrid, lineMask * 0.55 * fade);
                 gl_FragColor = vec4(color, 1.0);
             }
         `
@@ -659,7 +676,10 @@ export function init(el) {
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x040810);
-    scene.fog = new THREE.FogExp2(0x040810, 0.0035);
+    // No distance fog: it faded everything toward black as the camera pulled
+    // back, so zooming out dimmed the whole map (56% of pixels went near-black
+    // at full zoom-out versus 27% at the default framing). It originally hid
+    // the edge of the coastline data, which now extends well past the view.
 
     // The terminals span roughly 100 x 140 scene units, so the camera sits high
     // enough to frame all of them at a ~50 degree look-down rather than grazing
