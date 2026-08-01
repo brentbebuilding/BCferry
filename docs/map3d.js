@@ -710,6 +710,12 @@ export function init(el) {
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.panSpeed = 1.1;
 
+    // Negative speed flips the orbit direction. OrbitControls' default spins the
+    // camera the way your fingers move, which reads backwards next to the
+    // one-finger pan: there you grab the map and it follows you. This makes the
+    // orbit follow the same grab-the-world rule on both axes.
+    controls.rotateSpeed = -1;
+
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.35;
     controls.addEventListener('start', () => { controls.autoRotate = false; });
