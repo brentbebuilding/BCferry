@@ -62,11 +62,42 @@ function annotateSailingDays(sailings) {
     });
 }
 
+// Current wall-clock time in BC, in minutes since midnight. Sailing times in the
+// API are always local BC time, so this has to match regardless of the viewer's
+// own timezone.
+function pacificNowMinutes() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Vancouver',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(new Date());
+
+    const hour = parseInt(parts.find(p => p.type === 'hour').value) % 24;
+    const minute = parseInt(parts.find(p => p.type === 'minute').value);
+    return hour * 60 + minute;
+}
+
+// A sailing counts as departed once its scheduled time is more than this many
+// minutes behind now - a short grace period so a boat still boarding doesn't
+// disappear the instant the clock ticks past its departure time.
+const DEPARTED_GRACE_MINUTES = 20;
+
 // Filter sailings by the selected day. Departed sailings are dropped everywhere -
-// this is a live tracker, not a log of what already left.
+// this is a live tracker, not a log of what already left. Departure is computed
+// from the scheduled time rather than the API's sailingStatus field, which can be
+// stale or missing on sailings that came from the capacity feed.
 function filterSailingsByStatus(sailings, dayFilter) {
+    const nowMinutes = pacificNowMinutes();
+
     const timed = annotateSailingDays(sailings.filter(s => s.time))
-        .filter(s => s.sailingStatus !== 'past');
+        .filter(sailing => {
+            if (sailing.day !== 'today') return true;
+            const minutes = parseTimeToMinutes(sailing.time);
+            if (minutes === null) return true;
+            return nowMinutes - minutes < DEPARTED_GRACE_MINUTES;
+        });
+
     if (dayFilter === 'all') return timed;
     return timed.filter(s => s.day === dayFilter);
 }
