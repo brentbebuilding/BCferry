@@ -5,6 +5,7 @@
 // old Leaflet map, only the rendering underneath it.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { COASTLINE_RINGS } from './coastline.js';
 
 // ---- Geography ----------------------------------------------------------
 // Same terminals and coordinates the backend uses, so vessel.to strings from
@@ -126,8 +127,8 @@ function createOcean() {
     const material = new THREE.ShaderMaterial({
         uniforms: {
             uTime: { value: 0 },
-            uColorDeep: { value: new THREE.Color(0x03080f) },
-            uColorGrid: { value: new THREE.Color(0x0d6b73) }
+            uColorDeep: { value: new THREE.Color(0x02060c) },
+            uColorGrid: { value: new THREE.Color(0x0a4f5e) }
         },
         vertexShader: `
             varying vec2 vUv;
@@ -156,6 +157,60 @@ function createOcean() {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.rotation.x = -Math.PI / 2;
     return { mesh, material };
+}
+
+// Build the land as extruded shapes rising out of the water, plus a bright
+// outline along the shoreline. ExtrudeGeometry accepts an array of shapes and
+// returns a single geometry, so all 70-odd islands cost one draw call.
+const LAND_HEIGHT = 3;
+const LAND_BASE_Y = -0.5;
+
+function createLand() {
+    const group = new THREE.Group();
+    const shapes = [];
+    const outlinePositions = [];
+
+    COASTLINE_RINGS.forEach(flat => {
+        const points = [];
+        for (let i = 0; i < flat.length; i += 2) {
+            const { x, z } = project(flat[i + 1], flat[i]);
+            // Shapes are built in XY and extruded along +Z; the mesh is then
+            // rotated so shape-Y maps to world -Z and the extrusion points up.
+            points.push(new THREE.Vector2(x, -z));
+        }
+        if (points.length < 3) return;
+        shapes.push(new THREE.Shape(points));
+
+        for (let i = 0; i < points.length; i++) {
+            const a = points[i];
+            const b = points[(i + 1) % points.length];
+            outlinePositions.push(a.x, LAND_BASE_Y + LAND_HEIGHT, -a.y);
+            outlinePositions.push(b.x, LAND_BASE_Y + LAND_HEIGHT, -b.y);
+        }
+    });
+
+    const geometry = new THREE.ExtrudeGeometry(shapes, { depth: LAND_HEIGHT, bevelEnabled: false });
+    const material = new THREE.MeshStandardMaterial({
+        color: 0x24404c,
+        emissive: 0x11333a,
+        emissiveIntensity: 0.9,
+        roughness: 0.85,
+        metalness: 0.0
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = LAND_BASE_Y;
+    group.add(mesh);
+
+    const outlineGeometry = new THREE.BufferGeometry();
+    outlineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(outlinePositions, 3));
+    const outline = new THREE.LineSegments(
+        outlineGeometry,
+        new THREE.LineBasicMaterial({ color: 0x5cffe4, transparent: true, opacity: 0.95 })
+    );
+    group.add(outline);
+
+    return group;
 }
 
 function createStarfield() {
@@ -424,9 +479,9 @@ function onPointerDown(event) {
     }
 }
 
-// Half-extent of the terminal spread, plus margin, in scene units
-const SCENE_HALF_X = 62;
-const SCENE_HALF_Z = 80;
+// Half-extent to frame: wide enough to show the coastline around the routes
+const SCENE_HALF_X = 78;
+const SCENE_HALF_Z = 95;
 const CAMERA_DIRECTION = new THREE.Vector3(0, 125, 105).normalize();
 const CAMERA_TILT_SIN = Math.sin(Math.atan2(125, 105));
 
@@ -439,7 +494,14 @@ function overviewCameraPosition() {
 
     const distanceForWidth = SCENE_HALF_X / Math.tan(hFov / 2);
     const distanceForDepth = (SCENE_HALF_Z * CAMERA_TILT_SIN) / Math.tan(vFov / 2);
-    const distance = Math.max(distanceForWidth, distanceForDepth);
+
+    // A portrait phone is narrow enough that fitting the full width would zoom
+    // way out and leave dead space above the coast, so cap how far the width
+    // constraint may pull back and let the land crop off the sides instead.
+    const distance = Math.max(
+        distanceForDepth,
+        Math.min(distanceForWidth, distanceForDepth * 1.25)
+    );
 
     controls.maxDistance = Math.max(260, distance * 1.6);
     return CAMERA_DIRECTION.clone().multiplyScalar(distance);
@@ -572,6 +634,7 @@ export function init(el) {
 
     ocean = createOcean();
     scene.add(ocean.mesh);
+    scene.add(createLand());
     scene.add(createStarfield());
 
     Object.entries(TERMINALS).forEach(([name, coords]) => {
