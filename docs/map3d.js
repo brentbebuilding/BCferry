@@ -376,6 +376,74 @@ let destinationBeacon = null;
 let destinationLine = null;
 let flight = null;
 
+// Rotation is driven here rather than by OrbitControls, which applies one
+// rotateSpeed to both axes. The axes want opposite signs: dragging sideways
+// should swing the map the way OrbitControls already does, while dragging up
+// and down should follow the finger the way the one-finger pan does.
+const AZIMUTH_SIGN = 1;
+const POLAR_SIGN = -1;
+
+const orbitPointers = new Map();
+let orbitCentroid = null;
+
+function pointerCentroid() {
+    let x = 0, y = 0;
+    orbitPointers.forEach(p => { x += p.x; y += p.y; });
+    return { x: x / orbitPointers.size, y: y / orbitPointers.size };
+}
+
+function orbitBy(dxPixels, dyPixels) {
+    const height = renderer.domElement.clientHeight || 1;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+
+    spherical.theta -= AZIMUTH_SIGN * 2 * Math.PI * dxPixels / height;
+    spherical.phi -= POLAR_SIGN * 2 * Math.PI * dyPixels / height;
+    spherical.phi = Math.max(controls.minPolarAngle, Math.min(controls.maxPolarAngle, spherical.phi));
+    spherical.makeSafe();
+
+    camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
+    camera.lookAt(controls.target);
+}
+
+// Rotate on a left-button mouse drag, or on a two-finger drag. Two fingers also
+// pinch-to-zoom, which OrbitControls still handles; this only reads how the
+// midpoint between them moves.
+function attachOrbitGesture(el) {
+    el.addEventListener('pointerdown', event => {
+        orbitPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        orbitCentroid = null;
+    });
+
+    el.addEventListener('pointermove', event => {
+        if (!orbitPointers.has(event.pointerId)) return;
+        orbitPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        const mouseDragging = event.pointerType === 'mouse' && (event.buttons & 1) !== 0;
+        const twoFingers = event.pointerType !== 'mouse' && orbitPointers.size === 2;
+
+        if (!mouseDragging && !twoFingers) {
+            orbitCentroid = null;
+            return;
+        }
+
+        const centroid = pointerCentroid();
+        if (orbitCentroid) {
+            orbitBy(centroid.x - orbitCentroid.x, centroid.y - orbitCentroid.y);
+            controls.autoRotate = false;
+        }
+        orbitCentroid = centroid;
+    });
+
+    const release = event => {
+        orbitPointers.delete(event.pointerId);
+        orbitCentroid = null;
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('pointerleave', release);
+}
+
 // Keep two-finger gestures inside the map instead of letting the browser zoom
 // the page with them. OrbitControls sets touch-action: none on the canvas,
 // which is enough for Chrome and Android, but iOS Safari runs pinch-to-zoom
@@ -710,11 +778,9 @@ export function init(el) {
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.panSpeed = 1.1;
 
-    // Negative speed flips the orbit direction. OrbitControls' default spins the
-    // camera the way your fingers move, which reads backwards next to the
-    // one-finger pan: there you grab the map and it follows you. This makes the
-    // orbit follow the same grab-the-world rule on both axes.
-    controls.rotateSpeed = -1;
+    // The two rotation axes want opposite signs, and OrbitControls has a single
+    // rotateSpeed for both, so rotation is handled in attachOrbitGesture below.
+    controls.enableRotate = false;
 
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.35;
@@ -743,6 +809,7 @@ export function init(el) {
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    attachOrbitGesture(renderer.domElement);
     blockBrowserPinch(container);
 
     clock = new THREE.Clock();
