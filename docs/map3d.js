@@ -122,13 +122,20 @@ function createLabelSprite(text, color) {
 
 // ---- Scene building blocks ------------------------------------------------
 
+// Wide enough that the water still extends past the coastline data when the
+// camera is zoomed all the way out. Grid divisions scale with it so the cells
+// stay a constant size on the water.
+const OCEAN_SIZE = 1100;
+const OCEAN_GRID_DIVISIONS = Math.round(OCEAN_SIZE / 10.5);
+
 function createOcean() {
-    const geometry = new THREE.PlaneGeometry(500, 500, 140, 140);
+    const geometry = new THREE.PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE, 160, 160);
     const material = new THREE.ShaderMaterial({
         uniforms: {
             uTime: { value: 0 },
             uColorDeep: { value: new THREE.Color(0x02060c) },
-            uColorGrid: { value: new THREE.Color(0x0a4f5e) }
+            uColorGrid: { value: new THREE.Color(0x0a4f5e) },
+            uGridDivisions: { value: OCEAN_GRID_DIVISIONS }
         },
         vertexShader: `
             varying vec2 vUv;
@@ -145,8 +152,9 @@ function createOcean() {
             varying vec2 vUv;
             uniform vec3 uColorDeep;
             uniform vec3 uColorGrid;
+            uniform float uGridDivisions;
             void main() {
-                vec2 g = fract(vUv * 48.0);
+                vec2 g = fract(vUv * uGridDivisions);
                 vec2 distToLine = min(g, 1.0 - g);
                 float lineMask = 1.0 - smoothstep(0.0, 0.035, min(distToLine.x, distToLine.y));
                 vec3 color = mix(uColorDeep, uColorGrid, lineMask * 0.5);
@@ -456,6 +464,29 @@ function selectShip(mmsi) {
     controls.autoRotate = false;
 }
 
+// Keep panning within the charted area and pinned to the water, so the view
+// can't be dragged off into empty ocean or drift above the surface.
+const PAN_LIMIT_X = 170;
+const PAN_LIMIT_Z = 190;
+
+function clampTarget() {
+    const t = controls.target;
+    const x = Math.max(-PAN_LIMIT_X, Math.min(PAN_LIMIT_X, t.x));
+    const z = Math.max(-PAN_LIMIT_Z, Math.min(PAN_LIMIT_Z, t.z));
+
+    if (x !== t.x || z !== t.z || t.y !== 0) {
+        const dx = x - t.x;
+        const dz = z - t.z;
+        const dy = -t.y;
+        t.set(x, 0, z);
+        // Move the camera with the target so clamping slides the view rather
+        // than swinging the camera around a suddenly-shifted focus point.
+        camera.position.x += dx;
+        camera.position.y += dy;
+        camera.position.z += dz;
+    }
+}
+
 function updateFlight(elapsed) {
     const t = Math.min(1, (elapsed - flight.startTime) / flight.duration);
     const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
@@ -583,6 +614,9 @@ function animate() {
     }
 
     controls.update();
+    // Clamp after update(), which is what applies the damped pan offset -
+    // clamping before it lets the leftover inertia creep past the limit.
+    if (!flight) clampTarget();
     renderer.render(scene, camera);
 }
 
@@ -622,6 +656,19 @@ export function init(el) {
     controls.minDistance = 15;
     controls.maxDistance = 260;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+    // Pan across the water rather than across the screen. With a tilted camera,
+    // screen-space panning walks the focus point up into the sky - a single
+    // two-finger drag was enough to lift it several units off the surface, and
+    // it compounds with every gesture until navigation feels broken.
+    controls.screenSpacePanning = false;
+
+    // Map-style touch: one finger drags the map, two fingers pinch to zoom and
+    // can still drag at the same time. Mouse keeps left-drag to orbit.
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.panSpeed = 1.1;
+
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.35;
     controls.addEventListener('start', () => { controls.autoRotate = false; });
