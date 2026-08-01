@@ -473,6 +473,9 @@ footer p {
     overflow: hidden;
     background: #040810;
     border: 1px solid var(--border);
+    /* Gestures here drive the camera; don't let them scroll or zoom the page */
+    touch-action: none;
+    overscroll-behavior: none;
 }
 
 .map3d-canvas canvas {

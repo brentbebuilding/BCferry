@@ -359,6 +359,24 @@ let destinationBeacon = null;
 let destinationLine = null;
 let flight = null;
 
+// Keep two-finger gestures inside the map instead of letting the browser zoom
+// the page with them. OrbitControls sets touch-action: none on the canvas,
+// which is enough for Chrome and Android, but iOS Safari runs pinch-to-zoom
+// above the touch-action layer and only backs off if its proprietary gesture
+// events are cancelled. Without this the page zooms and the map never sees the
+// pinch at all. Scoped to the map, so the rest of the page zooms normally.
+function blockBrowserPinch(el) {
+    const swallow = event => event.preventDefault();
+
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(type => {
+        el.addEventListener(type, swallow, { passive: false });
+    });
+
+    el.addEventListener('touchmove', event => {
+        if (event.touches.length > 1) event.preventDefault();
+    }, { passive: false });
+}
+
 function showFallback(el, message) {
     const div = document.createElement('div');
     div.className = 'map3d-fallback';
@@ -655,6 +673,9 @@ export function init(el) {
     controls.dampingFactor = 0.08;
     controls.minDistance = 15;
     controls.maxDistance = 260;
+    // Stop just short of straight down and of the horizon: at the pole the
+    // azimuth goes degenerate and orbiting feels like it snags.
+    controls.minPolarAngle = 0.15;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
 
     // Pan across the water rather than across the screen. With a tilted camera,
@@ -664,8 +685,8 @@ export function init(el) {
     controls.screenSpacePanning = false;
 
     // Map-style touch: one finger drags the map, two fingers pinch to zoom and
-    // can still drag at the same time. Mouse keeps left-drag to orbit.
-    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+    // drag to orbit. Mouse keeps left-drag to orbit.
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.panSpeed = 1.1;
 
@@ -696,6 +717,7 @@ export function init(el) {
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    blockBrowserPinch(container);
 
     clock = new THREE.Clock();
     sceneReady = true;
