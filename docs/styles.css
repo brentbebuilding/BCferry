@@ -193,9 +193,9 @@ select option {
 .route-card {
     background: var(--bg-secondary);
     border-radius: 12px;
-    padding: 24px;
     border: 1px solid var(--border);
-    transition: all 0.2s ease;
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .route-card:hover {
@@ -203,17 +203,41 @@ select option {
     box-shadow: var(--shadow-md);
 }
 
-.route-header {
+/* The whole collapsed row is the control, so it is a real button: keyboard
+   focus and Enter/Space come for free, and screen readers get the state. */
+.route-toggle {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    width: 100%;
+    padding: 20px 24px;
+    background: none;
+    border: none;
+    font-family: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.route-toggle:hover {
+    background: var(--bg-tertiary);
+}
+
+.route-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.route-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
 }
 
 .route-title {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -221,6 +245,64 @@ select option {
 .route-direction {
     font-size: 0.85rem;
     color: var(--text-muted);
+}
+
+.route-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.route-next {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.route-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.route-chevron {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    transform: rotate(45deg) translate(-2px, -2px);
+    transition: transform 0.25s ease;
+}
+
+.route-card.expanded .route-chevron {
+    transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+/* Animating grid-template-rows between 0fr and 1fr collapses to the content's
+   own height, so nothing clips the way a guessed max-height would. */
+.route-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
+}
+
+.route-card.expanded .route-body {
+    grid-template-rows: 1fr;
+}
+
+.route-body-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.route-card.expanded .route-body-inner {
+    border-top: 1px solid var(--border);
+}
+
+.route-body .sailings-grid {
+    padding: 20px 24px 24px;
 }
 
 .sailings-grid {
@@ -589,6 +671,15 @@ footer p {
     }
 
     .route-title {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
+    }
+
+    .route-toggle {
+        padding: 16px;
+        gap: 12px;
+    }
+
+    .route-body .sailings-grid {
+        padding: 16px;
     }
 }

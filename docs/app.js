@@ -299,10 +299,16 @@ function filterAndDisplayRoutes() {
         filteredRoutes = allRoutes.filter(route =>
             route.fromTerminalCode === from && route.toTerminalCode === to
         );
+        expandedRoutes.add(selectedRoute);
     }
 
     displayRoutes();
 }
+
+// Routes start collapsed and expand on click. Kept as route codes rather than
+// DOM state so the open ones survive a re-render - the schedule reloads itself
+// every five minutes, and collapsing what someone was reading would be rude.
+const expandedRoutes = new Set();
 
 // Display routes
 function displayRoutes() {
@@ -311,15 +317,18 @@ function displayRoutes() {
         return;
     }
 
-    // Filter out routes with no sailings after applying day filter
+    // Drop routes with nothing left after the day filter, and hold on to the
+    // filtered sailings so the card doesn't have to work them out again
     const selectedDay = dayFilter.value;
 
-    const routesWithSailings = filteredRoutes.filter(route => {
-        const filteredSailings = route.sailings && route.sailings.length > 0
-            ? filterSailingsByStatus(route.sailings, selectedDay)
-            : [];
-        return filteredSailings.length > 0;
-    });
+    const routesWithSailings = filteredRoutes
+        .map(route => ({
+            route,
+            sailings: route.sailings && route.sailings.length > 0
+                ? filterSailingsByStatus(route.sailings, selectedDay)
+                : []
+        }))
+        .filter(entry => entry.sailings.length > 0);
 
     // If no routes have sailings, show a message
     if (routesWithSailings.length === 0) {
@@ -327,38 +336,67 @@ function displayRoutes() {
         return;
     }
 
-    routesContainer.innerHTML = routesWithSailings.map(route => createRouteCard(route)).join('');
+    routesContainer.innerHTML = routesWithSailings
+        .map(entry => createRouteCard(entry.route, entry.sailings))
+        .join('');
 }
 
-// Create route card HTML
-function createRouteCard(route) {
+// Create route card HTML - a collapsed summary row that opens to the sailings
+function createRouteCard(route, sailings) {
+    const routeCode = `${route.fromTerminalCode}-${route.toTerminalCode}`;
     const fromName = getTerminalName(route.fromTerminalCode);
     const toName = getTerminalName(route.toTerminalCode);
+    const isExpanded = expandedRoutes.has(routeCode);
 
-    // Filter sailings by selected day filter
-    const selectedDay = dayFilter.value;
-    const filteredSailings = route.sailings && route.sailings.length > 0
-        ? filterSailingsByStatus(route.sailings, selectedDay)
-        : [];
+    // Collapsed, the row still has to earn its place: show when the next boat
+    // goes and how many are left, so the list is usable without opening anything
+    const nextTime = sailings[0] && sailings[0].time ? sailings[0].time : '';
+    const countLabel = `${sailings.length} sailing${sailings.length === 1 ? '' : 's'}`;
 
-    const sailingsHTML = filteredSailings.length > 0
-        ? filteredSailings.map(sailing => createSailingCard(sailing)).join('')
-        : '<div class="no-sailings">No sailings scheduled</div>';
+    const sailingsHTML = sailings.map(sailing => createSailingCard(sailing)).join('');
 
     return `
-        <div class="route-card">
-            <div class="route-header">
-                <div>
-                    <div class="route-title">${fromName} → ${toName}</div>
-                    <div class="route-direction">${route.fromTerminalCode} to ${route.toTerminalCode}</div>
+        <div class="route-card${isExpanded ? ' expanded' : ''}">
+            <button type="button" class="route-toggle" data-route="${routeCode}"
+                    aria-expanded="${isExpanded}" aria-controls="route-body-${routeCode}">
+                <span class="route-heading">
+                    <span class="route-title">${fromName} → ${toName}</span>
+                    <span class="route-direction">${route.fromTerminalCode} to ${route.toTerminalCode}</span>
+                </span>
+                <span class="route-summary">
+                    ${nextTime ? `<span class="route-next">Next ${nextTime}</span>` : ''}
+                    <span class="route-count">${countLabel}</span>
+                </span>
+                <span class="route-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="route-body" id="route-body-${routeCode}">
+                <div class="route-body-inner">
+                    <div class="sailings-grid">
+                        ${sailingsHTML}
+                    </div>
                 </div>
-            </div>
-            <div class="sailings-grid">
-                ${sailingsHTML}
             </div>
         </div>
     `;
 }
+
+// One delegated listener, so it keeps working after the list re-renders.
+// Toggling flips a class rather than redrawing, which keeps the page from
+// jumping under the finger when a card above the tap opens or closes.
+routesContainer.addEventListener('click', event => {
+    const toggle = event.target.closest('.route-toggle');
+    if (!toggle) return;
+
+    const card = toggle.closest('.route-card');
+    const routeCode = toggle.dataset.route;
+    const isExpanded = !card.classList.contains('expanded');
+
+    card.classList.toggle('expanded', isExpanded);
+    toggle.setAttribute('aria-expanded', String(isExpanded));
+
+    if (isExpanded) expandedRoutes.add(routeCode);
+    else expandedRoutes.delete(routeCode);
+});
 
 // Create sailing card HTML - Normal display with capacity
 function createSailingCard(sailing) {
