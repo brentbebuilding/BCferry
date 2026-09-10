@@ -376,68 +376,153 @@ let destinationBeacon = null;
 let destinationLine = null;
 let flight = null;
 
-// Rotation is driven here rather than by OrbitControls, which applies one
-// rotateSpeed to both axes. The axes want opposite signs: dragging sideways
-// should swing the map the way OrbitControls already does, while dragging up
-// and down should follow the finger the way the one-finger pan does.
-const AZIMUTH_SIGN = 1;
-const POLAR_SIGN = -1;
+// Rotation is handled here rather than by OrbitControls, which reads rotation
+// from how the midpoint between two fingers moves. That is what made the map
+// feel wrong: the midpoint always drifts while pinching, so zooming swung the
+// camera at random, sliding two fingers sideways spun the map, and the twist
+// that every map app uses to turn the compass did nothing at all.
+//
+// These are the gestures 3D map apps actually use:
+//   one finger  - pan (left to OrbitControls)
+//   pinch       - zoom (left to OrbitControls)
+//   two-finger twist       - turn the heading
+//   two-finger slide up/down - tilt between overhead and horizon
+// Each rotation axis has to clear a deadzone before it engages, so an ordinary
+// sloppy pinch zooms without also spinning or tilting the view.
+const TWIST_DEADZONE = 0.10;   // radians, about 6 degrees
+const TILT_DEADZONE = 12;      // pixels
+const ROTATE_DAMPING = 0.18;   // eases rotation like the damped pan and zoom
+
+// Rotation is accumulated here and eased out a fraction per frame, so it glides
+// and carries a little inertia instead of snapping the way direct camera writes
+// did - that mismatch against the damped pan and zoom read as jitter.
+let pendingTheta = 0;
+let pendingPhi = 0;
 
 const orbitPointers = new Map();
-let orbitCentroid = null;
+let twoFinger = null;
+let mouseOrbitPrev = null;
 
-function pointerCentroid() {
-    let x = 0, y = 0;
-    orbitPointers.forEach(p => { x += p.x; y += p.y; });
-    return { x: x / orbitPointers.size, y: y / orbitPointers.size };
+function clearPendingOrbit() {
+    pendingTheta = 0;
+    pendingPhi = 0;
 }
 
-function orbitBy(dxPixels, dyPixels) {
-    const height = renderer.domElement.clientHeight || 1;
+function queueOrbit(dTheta, dPhi) {
+    if (dTheta === 0 && dPhi === 0) return;
+    pendingTheta += dTheta;
+    pendingPhi += dPhi;
+    controls.autoRotate = false;
+}
+
+function applyPendingOrbit() {
+    if (Math.abs(pendingTheta) < 1e-5 && Math.abs(pendingPhi) < 1e-5) {
+        clearPendingOrbit();
+        return;
+    }
+
+    const stepTheta = pendingTheta * ROTATE_DAMPING;
+    const stepPhi = pendingPhi * ROTATE_DAMPING;
+    pendingTheta -= stepTheta;
+    pendingPhi -= stepPhi;
+
     const offset = camera.position.clone().sub(controls.target);
     const spherical = new THREE.Spherical().setFromVector3(offset);
-
-    spherical.theta -= AZIMUTH_SIGN * 2 * Math.PI * dxPixels / height;
-    spherical.phi -= POLAR_SIGN * 2 * Math.PI * dyPixels / height;
-    spherical.phi = Math.max(controls.minPolarAngle, Math.min(controls.maxPolarAngle, spherical.phi));
+    spherical.theta += stepTheta;
+    spherical.phi = Math.max(
+        controls.minPolarAngle,
+        Math.min(controls.maxPolarAngle, spherical.phi + stepPhi)
+    );
     spherical.makeSafe();
 
     camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
     camera.lookAt(controls.target);
 }
 
-// Rotate on a left-button mouse drag, or on a two-finger drag. Two fingers also
-// pinch-to-zoom, which OrbitControls still handles; this only reads how the
-// midpoint between them moves.
+function normalizeAngle(angle) {
+    let a = angle;
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+}
+
+function twoFingerGeometry() {
+    const [a, b] = [...orbitPointers.values()];
+    return {
+        // Screen y grows downward, so a clockwise twist increases this angle.
+        angle: Math.atan2(b.y - a.y, b.x - a.x),
+        centroidY: (a.y + b.y) / 2
+    };
+}
+
+function handleTwoFingerRotate() {
+    const now = twoFingerGeometry();
+
+    if (!twoFinger) {
+        twoFinger = { ...now, twist: 0, tilt: 0, twisting: false, tilting: false };
+        return;
+    }
+
+    const dAngle = normalizeAngle(now.angle - twoFinger.angle);
+    const dY = now.centroidY - twoFinger.centroidY;
+    twoFinger.angle = now.angle;
+    twoFinger.centroidY = now.centroidY;
+
+    twoFinger.twist += dAngle;
+    twoFinger.tilt += dY;
+    if (Math.abs(twoFinger.twist) > TWIST_DEADZONE) twoFinger.twisting = true;
+    if (Math.abs(twoFinger.tilt) > TILT_DEADZONE) twoFinger.tilting = true;
+
+    const height = renderer.domElement.clientHeight || 1;
+    queueOrbit(
+        // Turning the fingers clockwise turns the map clockwise with them.
+        twoFinger.twisting ? dAngle : 0,
+        // Pulling both fingers down tips the view toward the horizon.
+        twoFinger.tilting ? dY * 2 * Math.PI / height : 0
+    );
+}
+
+function handleMouseRotate(event) {
+    if ((event.buttons & 1) === 0) {
+        mouseOrbitPrev = null;
+        return;
+    }
+
+    const current = { x: event.clientX, y: event.clientY };
+    if (mouseOrbitPrev) {
+        const height = renderer.domElement.clientHeight || 1;
+        queueOrbit(
+            -(current.x - mouseOrbitPrev.x) * 2 * Math.PI / height,
+            (current.y - mouseOrbitPrev.y) * 2 * Math.PI / height
+        );
+    }
+    mouseOrbitPrev = current;
+}
+
 function attachOrbitGesture(el) {
     el.addEventListener('pointerdown', event => {
         orbitPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-        orbitCentroid = null;
+        twoFinger = null;
+        mouseOrbitPrev = null;
     });
 
     el.addEventListener('pointermove', event => {
         if (!orbitPointers.has(event.pointerId)) return;
         orbitPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
-        const mouseDragging = event.pointerType === 'mouse' && (event.buttons & 1) !== 0;
-        const twoFingers = event.pointerType !== 'mouse' && orbitPointers.size === 2;
-
-        if (!mouseDragging && !twoFingers) {
-            orbitCentroid = null;
-            return;
+        if (event.pointerType === 'mouse') {
+            handleMouseRotate(event);
+        } else if (orbitPointers.size === 2) {
+            handleTwoFingerRotate();
+        } else {
+            twoFinger = null;
         }
-
-        const centroid = pointerCentroid();
-        if (orbitCentroid) {
-            orbitBy(centroid.x - orbitCentroid.x, centroid.y - orbitCentroid.y);
-            controls.autoRotate = false;
-        }
-        orbitCentroid = centroid;
     });
 
     const release = event => {
         orbitPointers.delete(event.pointerId);
-        orbitCentroid = null;
+        twoFinger = null;
+        mouseOrbitPrev = null;
     };
     el.addEventListener('pointerup', release);
     el.addEventListener('pointercancel', release);
@@ -710,6 +795,7 @@ function animate() {
     });
 
     if (flight) updateFlight(elapsed);
+    else applyPendingOrbit();
     if (destinationLine) destinationLine.material.opacity = 0.55 + Math.sin(elapsed * 3) * 0.3;
     if (destinationBeacon) {
         const pulse = 10 + Math.sin(elapsed * 3) * 2.5;
