@@ -248,13 +248,26 @@ async function fetchFerryData() {
 
 // The main sailings - everything else (Gulf Islands, Bellingham, etc.) is noise
 // for most users and is excluded from both the dropdown and the "All Routes" view.
+// This array is also the display order, top to bottom, for both the cards and
+// the route dropdown. It is a deliberate running order, not alphabetical and
+// not whatever order the API happened to return.
 const MAJOR_ROUTES = [
-    'TSA-SWB', 'SWB-TSA', // Tsawwassen ↔ Swartz Bay
-    'TSA-DUK', 'DUK-TSA', // Tsawwassen ↔ Duke Point
-    'HSB-NAN', 'NAN-HSB', // Horseshoe Bay ↔ Nanaimo
-    'HSB-LNG', 'LNG-HSB', // Horseshoe Bay ↔ Langdale
-    'HSB-BOW', 'BOW-HSB'  // Horseshoe Bay ↔ Bowen Island
+    'HSB-NAN', // Horseshoe Bay → Nanaimo (Departure Bay)
+    'NAN-HSB', // Nanaimo (Departure Bay) → Horseshoe Bay
+    'HSB-LNG', // Horseshoe Bay → Langdale
+    'LNG-HSB', // Langdale → Horseshoe Bay
+    'TSA-DUK', // Tsawwassen → Duke Point
+    'DUK-TSA', // Duke Point → Tsawwassen
+    'TSA-SWB', // Tsawwassen → Swartz Bay
+    'SWB-TSA', // Swartz Bay → Tsawwassen
+    'HSB-BOW', // Horseshoe Bay → Bowen Island
+    'BOW-HSB'  // Bowen Island → Horseshoe Bay
 ];
+
+// Look up a route by its code, so MAJOR_ROUTES can drive the ordering
+function findRouteByCode(routeCode) {
+    return allRoutes.find(route => `${route.fromTerminalCode}-${route.toTerminalCode}` === routeCode);
+}
 
 // Update route filter dropdown
 function updateRouteFilter() {
@@ -263,18 +276,15 @@ function updateRouteFilter() {
     // Clear existing options
     routeFilter.innerHTML = '<option value="all">All Routes</option>';
 
-    // Add route options - clean labels
-    allRoutes.forEach(route => {
-        const routeCode = `${route.fromTerminalCode}-${route.toTerminalCode}`;
+    // Add route options - clean labels, in the MAJOR_ROUTES running order
+    MAJOR_ROUTES.forEach(routeCode => {
+        const route = findRouteByCode(routeCode);
+        if (!route) return;
 
-        if (MAJOR_ROUTES.includes(routeCode)) {
-            const fromName = getTerminalName(route.fromTerminalCode);
-            const toName = getTerminalName(route.toTerminalCode);
-            const option = document.createElement('option');
-            option.value = routeCode;
-            option.textContent = `${fromName} → ${toName}`;
-            routeFilter.appendChild(option);
-        }
+        const option = document.createElement('option');
+        option.value = routeCode;
+        option.textContent = `${getTerminalName(route.fromTerminalCode)} → ${getTerminalName(route.toTerminalCode)}`;
+        routeFilter.appendChild(option);
     });
 
     // Restore previous selection if it still exists
@@ -291,9 +301,7 @@ function filterAndDisplayRoutes() {
     const selectedRoute = routeFilter.value;
 
     if (selectedRoute === 'all') {
-        filteredRoutes = allRoutes.filter(route =>
-            MAJOR_ROUTES.includes(`${route.fromTerminalCode}-${route.toTerminalCode}`)
-        );
+        filteredRoutes = MAJOR_ROUTES.map(findRouteByCode).filter(Boolean);
     } else {
         const [from, to] = selectedRoute.split('-');
         filteredRoutes = allRoutes.filter(route =>
