@@ -391,6 +391,10 @@ let flight = null;
 // sloppy pinch zooms without also spinning or tilting the view.
 const TWIST_DEADZONE = 0.10;   // radians, about 6 degrees
 const TILT_DEADZONE = 12;      // pixels
+// Which way a downward drag tips the view. -1 means pulling down brings the
+// camera overhead and pushing up lays it toward the horizon. Shared by the
+// touch and mouse paths so the same drag tilts the same way on both.
+const TILT_SIGN = -1;
 const ROTATE_DAMPING = 0.18;   // eases rotation like the damped pan and zoom
 
 // Rotation is accumulated here and eased out a fraction per frame, so it glides
@@ -477,8 +481,8 @@ function handleTwoFingerRotate() {
     queueOrbit(
         // Turning the fingers clockwise turns the map clockwise with them.
         twoFinger.twisting ? dAngle : 0,
-        // Pulling both fingers down tips the view toward the horizon.
-        twoFinger.tilting ? dY * 2 * Math.PI / height : 0
+        // Pushing both fingers up lays the view toward the horizon.
+        twoFinger.tilting ? TILT_SIGN * dY * 2 * Math.PI / height : 0
     );
 }
 
@@ -493,7 +497,7 @@ function handleMouseRotate(event) {
         const height = renderer.domElement.clientHeight || 1;
         queueOrbit(
             -(current.x - mouseOrbitPrev.x) * 2 * Math.PI / height,
-            (current.y - mouseOrbitPrev.y) * 2 * Math.PI / height
+            TILT_SIGN * (current.y - mouseOrbitPrev.y) * 2 * Math.PI / height
         );
     }
     mouseOrbitPrev = current;
